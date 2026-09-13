@@ -1302,11 +1302,17 @@
 .ai-scanner-best { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; margin-top: 10px; padding: 9px 12px; border: 1px solid rgba(0, 230, 223, .6); border-radius: 4px; background: rgba(0, 46, 37, .5); }
 .ai-scanner-best b { color: #eafff2; font-size: 10px; }
 .ai-scanner-best em { color: #8ef7b3; font: 10px var(--app-font-mono); font-style: normal; }
+.ai-scanner-digits { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; margin-top: 9px; }
+.ai-scanner-digits > div { display: grid; gap: 3px; place-items: center; padding: 6px 2px; border: 1px solid rgba(0, 202, 196, .45); border-radius: 3px; color: #9ccbb1; background: rgba(0, 36, 29, .82); font: 8px var(--app-font-mono); }
+.ai-scanner-digits > div.is-latest { border-color: #eaff5b; color: #f5ff9d; box-shadow: 0 0 10px rgba(220, 255, 70, .25); }
+.ai-scanner-digits strong { color: #eafff2; font-size: 11px; }
+.ai-scanner-digits span { color: #70e89c; font-size: 7px; }
 .ai-scanner-trade { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 8px 10px; border: 1px solid rgba(0, 230, 223, .6); border-radius: 4px; color: #baffcf; background: rgba(0, 29, 24, .78); font: 9px var(--app-font-mono); }
 .ai-scanner-trade span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-scanner-trade button { flex: 0 0 auto; min-height: 28px; padding: 0 10px; border: 1px solid #16f7e6; border-radius: 3px; color: #002d2c; background: #1bf1df; font: 800 8px var(--app-font-mono); cursor: pointer; }
 .ai-scanner-trade button:hover { background: #75fff4; }
 .ai-scanner-trade button:disabled { cursor: wait; opacity: .7; }
+.ai-scanner-execution-state { margin-top: 8px; padding: 7px 9px; border-left: 2px solid #17ef83; color: #c6ffd7; background: rgba(0, 65, 43, .5); font: 8px/1.4 var(--app-font-mono); }
 .ai-scanner-scan-button { display: block; width: min(360px, 80%); min-height: 45px; margin: 23px auto 0; border: 1px solid #26ffff; border-radius: 4px; color: #002c2b; background: linear-gradient(180deg, #24ffff, #00b5ae); box-shadow: 0 0 20px rgba(0, 248, 236, .42), inset 0 1px rgba(255, 255, 255, .65); font: 900 12px var(--app-font-mono); cursor: pointer; }
 .ai-scanner-scan-button:hover { background: linear-gradient(180deg, #6dffff, #00ccc1); }
 .ai-scanner-scan-button:disabled { cursor: wait; opacity: .68; }

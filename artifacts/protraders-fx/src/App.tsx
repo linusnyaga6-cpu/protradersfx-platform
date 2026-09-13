@@ -319,8 +319,8 @@ function FloatingMarketAI({ marketQuotes, draggable, openBulkScanner }: { market
           <div className="market-ai-matrix-log">
             <span>[INFO] Authenticating AI market matrix...</span>
             <span>[OK] Synthetic stream linked</span>
-            <span>[INFO] Reading volatility clusters...</span>
-            <span className="is-warning">[WARNING] Signal pressure rising</span>
+            <span>[INFO] Reading digit clusters...</span>
+            <span>[INFO] Signal pressure rising</span>
             <span>[INFO] Checking last digit sequence...</span>
           </div>
           <div className={`market-ai-matrix-status ${scanState === 'scanning' ? 'is-scanning' : ''}`}>
@@ -455,10 +455,6 @@ function Home() {
     const barrier = contractType === 'OVER/UNDER' ? 4 : undefined;
     if (!Number.isFinite(amount) || amount < 0.35) {
       setReviewState('Enter a stake of at least USD 0.35.');
-      return;
-    }
-    if (!window.confirm(`Place a LIVE ${contractSide} contract for USD ${amount.toFixed(2)} in ${accountMode} mode? This can lose funds.`)) {
-      setReviewState('Live trade cancelled.');
       return;
     }
     setReviewState(`Executing live ${contractSide} trade…`);
@@ -642,7 +638,7 @@ function Home() {
                <label className="manual-check"><input type="checkbox" checked={takeProfitEnabled} onChange={(event) => setTakeProfitEnabled(event.target.checked)} /> <span>Take profit</span><small>ⓘ</small></label>
                <div className="manual-contract-stats"><span><strong>Max. payout</strong><b>{stake ? `${(Number(stake) * 600).toFixed(2)} USD` : '—'}</b></span><span><strong>Max. ticks</strong><b>85 ticks</b></span></div>
                 <button type="submit" className="review-button manual-buy-button"><span>BUY LIVE</span><ChevronRight size={17} /></button>
-               <p className="live-execution-warning">Live execution is enabled for {accountMode} mode. Confirm the browser prompt before a contract is purchased.</p>
+                <p className="live-execution-warning">Live execution is enabled for {accountMode} mode. Review the risk icon in the dashboard before trading.</p>
                {reviewState && <p className="review-state" role="status">{reviewState}</p>}
             </div>
           </form>
@@ -652,7 +648,7 @@ function Home() {
       </main>
 
       <footer className="terminal-footer">
-        <span className="risk-warning"><strong>▲ RISK DISCLAIMER</strong> Trading carries risk; confirm the selected account before execution.</span>
+        <button type="button" className="risk-warning" title="Risk disclaimer: trading carries risk. Check the selected account mode before execution." aria-label="Open risk disclaimer">⚠</button>
         <span className="footer-brand">PROTRADERS FX · POWERED BY DERIV</span>
       </footer>
       <FloatingMarketAI marketQuotes={marketQuotes} draggable openBulkScanner={activeTool === 'Bulk Trader'} />
@@ -1171,13 +1167,14 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   const [bulkSide, setBulkSide] = useState<'left' | 'right'>('left');
   const [scannerState, setScannerState] = useState<'idle' | 'scanning' | 'complete'>('idle');
   const [scannerResults, setScannerResults] = useState<BulkScanResult[]>([]);
+  const [scannerDigits, setScannerDigits] = useState<Array<{ digit: number; percentage: number }>>([]);
   const [selectedScannerSymbol, setSelectedScannerSymbol] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerLog, setScannerLog] = useState<string[]>([
     '[INFO] Authenticating AI market matrix...',
     '[OK] Synthetic stream linked',
-    '[INFO] Reading volatility clusters...',
-    '[WARNING] Signal pressure rising',
+     '[INFO] Reading digit clusters...',
+     '[INFO] Signal pressure rising',
     '[INFO] Checking last digit sequence...',
   ]);
   const [executionState, setExecutionState] = useState<'idle' | 'executing'>('idle');
@@ -1190,6 +1187,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     const formatted = formatMarketPrice(value, activeQuote?.pipSize ?? 2);
     return Number(formatted.replace(/\D/g, '').slice(-1));
   }), [activeQuote]);
+  const latestBulkDigit = digitHistory.at(-1)?.toString() ?? '';
   const digitCounts = useMemo(() => {
     const counts = Array.from({ length: 10 }, () => 0);
     digitHistory.forEach((digit) => { if (Number.isFinite(digit)) counts[digit] += 1; });
@@ -1197,66 +1195,71 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     return counts.map((count) => ({ count, percentage: digitHistory.length ? (count / total) * 100 : 10 }));
   }, [digitHistory]);
   const scanMarkets = () => {
+    const preferredDefinition = getMarketDefinition(activeMarket);
+    const preferredQuote = marketQuotes[preferredDefinition.symbol];
     setScannerState('scanning');
     setScannerOpen(true);
     setScannerLog([
       '[INFO] Authenticating AI market matrix...',
       '[OK] Synthetic stream linked',
-      '[INFO] Reading volatility clusters...',
-      '[WARNING] Signal pressure rising',
+      '[INFO] Reading digit clusters...',
+      '[INFO] Signal pressure rising',
       '[INFO] Checking last digit sequence...',
       '[INFO] Searching live market matrix...',
     ]);
     window.setTimeout(() => {
-      const ranked = MARKET_DEFINITIONS.map((definition): BulkScanResult | null => {
-        const quote = marketQuotes[definition.symbol];
-        const ticks = (quote?.ticks ?? []).slice(-Math.max(20, Number(numberOfTicks) || 120));
-        if (!quote || quote.status !== 'live' || ticks.length < 8) return null;
-        const first = ticks[0];
-        const last = ticks.at(-1) ?? first;
-        const range = Math.max(...ticks) - Math.min(...ticks);
-        const counts = Array.from({ length: 10 }, () => 0);
-        ticks.forEach((tick) => {
-          const digit = Number(formatMarketPrice(tick, quote.pipSize).replace(/\D/g, '').slice(-1));
-          if (Number.isFinite(digit)) counts[digit] += 1;
-        });
-        const even = counts.filter((_, digit) => digit % 2 === 0).reduce((sum, count) => sum + count, 0) / ticks.length * 100;
-        const over = counts.filter((_, digit) => digit > 4).reduce((sum, count) => sum + count, 0) / ticks.length * 100;
-        const momentum = last >= first ? Math.min(100, 50 + Math.abs(last - first) / Math.max(range, Math.abs(first) * 0.00001, 1) * 50) : Math.max(0, 50 - Math.abs(last - first) / Math.max(range, Math.abs(first) * 0.00001, 1) * 50);
-        const direction = last >= first;
-        let side: BulkScanResult['side'];
-        let contractType: BulkScanResult['contractType'];
-        let confidence: number;
-        let rationale: string;
-        let barrier: number | undefined;
-        if (tradeType === 'Rise/Fall') {
-          side = direction ? 'Rise' : 'Fall';
-          contractType = direction ? 'CALL' : 'PUT';
-          confidence = Math.max(momentum, 100 - momentum);
-          rationale = `${direction ? 'positive' : 'negative'} momentum across ${ticks.length} ticks`;
-        } else if (tradeType === 'Over/Under') {
-          side = over >= 50 ? 'Over' : 'Under';
-          contractType = over >= 50 ? 'DIGITOVER' : 'DIGITUNDER';
-          confidence = Math.max(over, 100 - over);
-          barrier = 4;
-          rationale = `${Math.max(over, 100 - over).toFixed(1)}% of recent digits favor ${side.toLowerCase()} 4`;
-        } else {
-          side = even >= 50 ? 'Even' : 'Odd';
-          contractType = even >= 50 ? 'DIGITEVEN' : 'DIGITODD';
-          confidence = Math.max(even, 100 - even);
-          rationale = `${Math.max(even, 100 - even).toFixed(1)}% recent even/odd probability`;
-        }
-        return { definition, quote, side, contractType, confidence, sampleSize: ticks.length, rationale, barrier };
-      }).filter((result): result is BulkScanResult => result !== null)
-        .sort((left, right) => right.confidence - left.confidence)
-        .slice(0, 5);
-      setScannerResults(ranked);
-      setSelectedScannerSymbol(ranked[0]?.definition.symbol ?? '');
+      const ticks = (preferredQuote?.ticks ?? []).slice(-Math.max(20, Number(numberOfTicks) || 120));
+      const counts = Array.from({ length: 10 }, () => 0);
+      ticks.forEach((tick) => {
+        const digit = Number(formatMarketPrice(tick, preferredQuote?.pipSize ?? 2).replace(/\D/g, '').slice(-1));
+        if (Number.isFinite(digit)) counts[digit] += 1;
+      });
+      const digitResults = counts.map((count, digit) => ({ digit, percentage: ticks.length ? (count / ticks.length) * 100 : 0 }));
+      setScannerDigits(digitResults);
+      if (!preferredQuote || preferredQuote.status !== 'live' || ticks.length < 8) {
+        setScannerResults([]);
+        setSelectedScannerSymbol('');
+        setScannerState('complete');
+        setScannerLog((current) => [...current, '[INFO] Waiting for enough live ticks on the preferred market...']);
+        return;
+      }
+      const first = ticks[0];
+      const last = ticks.at(-1) ?? first;
+      const range = Math.max(...ticks) - Math.min(...ticks);
+      const even = counts.filter((_, digit) => digit % 2 === 0).reduce((sum, count) => sum + count, 0) / ticks.length * 100;
+      const over = counts.filter((_, digit) => digit > 4).reduce((sum, count) => sum + count, 0) / ticks.length * 100;
+      const momentum = last >= first ? Math.min(100, 50 + Math.abs(last - first) / Math.max(range, Math.abs(first) * 0.00001, 1) * 50) : Math.max(0, 50 - Math.abs(last - first) / Math.max(range, Math.abs(first) * 0.00001, 1) * 50);
+      const direction = last >= first;
+      let side: BulkScanResult['side'];
+      let contractType: BulkScanResult['contractType'];
+      let confidence: number;
+      let rationale: string;
+      let barrier: number | undefined;
+      if (tradeType === 'Rise/Fall') {
+        side = direction ? 'Rise' : 'Fall';
+        contractType = direction ? 'CALL' : 'PUT';
+        confidence = Math.max(momentum, 100 - momentum);
+        rationale = `${direction ? 'positive' : 'negative'} momentum across ${ticks.length} ticks`;
+      } else if (tradeType === 'Over/Under') {
+        side = over >= 50 ? 'Over' : 'Under';
+        contractType = over >= 50 ? 'DIGITOVER' : 'DIGITUNDER';
+        confidence = Math.max(over, 100 - over);
+        barrier = 4;
+        rationale = `${Math.max(over, 100 - over).toFixed(1)}% of recent digits favor ${side.toLowerCase()} 4`;
+      } else {
+        side = even >= 50 ? 'Even' : 'Odd';
+        contractType = even >= 50 ? 'DIGITEVEN' : 'DIGITODD';
+        confidence = Math.max(even, 100 - even);
+        rationale = `${Math.max(even, 100 - even).toFixed(1)}% recent even/odd probability`;
+      }
+      const result: BulkScanResult = { definition: preferredDefinition, quote: preferredQuote, side, contractType, confidence, sampleSize: ticks.length, rationale, barrier };
+      setScannerResults([result]);
+      setSelectedScannerSymbol(preferredDefinition.symbol);
       setScannerState('complete');
       setScannerLog((current) => [
         ...current,
-        ranked.length ? `[OK] ${ranked.length} market${ranked.length === 1 ? '' : 's'} ranked by signal confidence` : '[WARNING] Waiting for enough live ticks...',
-        ranked[0] ? `[OK] Best market: ${ranked[0].definition.name} · ${ranked[0].side}` : '[INFO] Keep the scanner open for more tick data',
+        `[OK] ${ticks.length} digits analyzed on ${preferredDefinition.name}`,
+        `[OK] Signal: ${result.side} · ${result.confidence.toFixed(1)}% confidence`,
       ]);
     }, 450);
   };
@@ -1269,10 +1272,6 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     const count = Math.min(20, Math.max(1, Number(bulkTrades) || 1));
     if (!Number.isFinite(amount) || amount < 0.35) {
       setReviewState('Enter a stake of at least USD 0.35 before running the AI batch.');
-      return;
-    }
-    if (!window.confirm(`Execute ${count} LIVE ${selectedScannerResult.side} trade${count === 1 ? '' : 's'} on ${selectedScannerResult.definition.name} for USD ${amount.toFixed(2)} each in ${accountMode} mode? This can lose funds.`)) {
-      setReviewState('Live AI batch cancelled.');
       return;
     }
     setExecutionState('executing');
@@ -1351,7 +1350,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
               <label><span>STAKE</span><input inputMode="decimal" value={stake} onChange={(event) => setStake(event.target.value)} /></label>
               <label><span>NO. OF BULK TRADES</span><input inputMode="numeric" value={bulkTrades} onChange={(event) => setBulkTrades(event.target.value)} /></label>
             </div>
-            <div className="ai-scanner-markets"><span>Markets</span><b>{scannerState === 'complete' ? `${scannerResults.length} ranked markets` : 'Waiting for scan data...'}</b></div>
+            <div className="ai-scanner-markets"><span>PREFERRED MARKET</span><b>{scannerState === 'complete' && selectedScannerResult ? selectedScannerResult.definition.name : activeDefinition.name}</b></div>
             <div className="ai-scanner-log" aria-live="polite">
               {scannerLog.map((line, index) => <div key={`${line}-${index}`} className={line.includes('[WARNING]') ? 'is-warning' : line.includes('[OK]') ? 'is-ok' : ''}>{line}</div>)}
             </div>
@@ -1359,8 +1358,10 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
               <div><span>{scannerState === 'complete' ? 'SCAN COMPLETE' : scannerState === 'scanning' ? 'SCANNING' : 'STANDBY'}</span><strong>{scannerState === 'complete' && selectedScannerResult ? `${selectedScannerResult.definition.name} · ${selectedScannerResult.side}` : scannerState === 'scanning' ? 'Reading live market pressure...' : 'Ready to scan for last-four digit pressure.'}</strong></div>
               <div className="ai-orb"><Sparkles size={17} /><b>AI</b></div>
             </div>
-            {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-best"><span>BEST MARKET</span><b>{selectedScannerResult.definition.name}</b><em>{selectedScannerResult.confidence.toFixed(1)}% confidence · {selectedScannerResult.side}</em></div>}
+            {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-best"><span>DIGIT SIGNAL</span><b>{selectedScannerResult.side}</b><em>{selectedScannerResult.confidence.toFixed(1)}% confidence · {selectedScannerResult.sampleSize} ticks</em></div>}
+            {scannerState === 'complete' && <div className="ai-scanner-digits" aria-label="Digit scan results">{scannerDigits.map(({ digit, percentage }) => <div key={digit} className={latestBulkDigit === String(digit) ? 'is-latest' : ''}><strong>{digit}</strong><span>{percentage.toFixed(1)}%</span></div>)}</div>}
             {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-trade"><span>{selectedScannerResult.definition.name} · {selectedScannerResult.side} · {accountMode}</span><button type="button" onClick={handleExecuteAiBatch} disabled={executionState === 'executing'}>{executionState === 'executing' ? 'EXECUTING…' : 'EXECUTE LIVE AI BATCH'}</button></div>}
+            {reviewState && <div className="ai-scanner-execution-state" role="status">{reviewState}</div>}
             <button type="button" className="ai-scanner-scan-button" onClick={scanMarkets} disabled={scannerState === 'scanning'}>{scannerState === 'scanning' ? 'SCANNING LIVE MARKETS...' : scannerState === 'complete' ? 'RESCAN MARKET MATRIX' : 'SCAN FOR BEST MARKET'}</button>
           </section>
         </div>
@@ -1395,10 +1396,6 @@ function RecoveryBotView({ accountMode, activeMarket, marketQuotes }: { accountM
     if (!Number.isFinite(amount) || amount < 0.35) {
       setProposalState('error');
       setProposalMessage('Enter a stake of at least USD 0.35.');
-      return;
-    }
-    if (!window.confirm(`Place a LIVE DIGITOVER contract for USD ${amount.toFixed(2)} in ${accountMode} mode? This can lose funds.`)) {
-      setProposalMessage('Live bot trade cancelled.');
       return;
     }
     setProposalState('requesting');
