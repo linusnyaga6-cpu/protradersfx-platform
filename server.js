@@ -233,7 +233,37 @@ app.post('/api/logout', (req, res) => { res.clearCookie('protraders_session', { 
 app.get('/api/accounts', async (req, res) => { const session = getSession(req); if (!session) return res.status(401).json({ authenticated: false }); try { const accounts = await refreshAccounts(session); const views = await accountViews(session, accounts); saveSession(res, session); res.json({ authenticated: true, accounts: views, activeMode: session.activeMode || 'demo' }); } catch (error) { res.status(502).json({ error: error.code || 'Account list unavailable', message: error.message }); } });
 app.post('/api/account/switch', async (req, res) => { const session = getSession(req); if (!session) return res.status(401).json({ authenticated: false }); const mode = req.body?.mode === 'real' ? 'real' : 'demo'; try { const accounts = await refreshAccounts(session); const account = selectedAccount(session, mode); if (!account) return res.status(409).json({ error: 'ACCOUNT_MODE_UNAVAILABLE', message: 'No ' + mode + ' account is linked to this Deriv login.' }); session.activeMode = mode; const views = await accountViews(session, accounts); const current = views.find((item) => item.account_id === account.account_id) || accountSummary(account, account.balance); saveSession(res, session); res.json({ authenticated: true, mode, loginid: current.loginid, currency: current.currency, balance: current.balance, accounts: views }); } catch (error) { res.status(502).json({ error: error.code || 'Account switch failed', message: error.message }); } });
 app.get('/api/account', async (req, res) => { const session = getSession(req); if (!session) return res.status(401).json({ authenticated: false }); const mode = req.query.mode === 'real' ? 'real' : req.query.mode === 'demo' ? 'demo' : session.activeMode || 'demo'; try { const accounts = await refreshAccounts(session); const account = selectedAccount(session, mode); if (!account) { const error = new Error('No ' + mode + ' account is linked to this Deriv login'); error.code = 'ACCOUNT_MODE_UNAVAILABLE'; throw error; } const current = accountSummary(account, account.balance); session.activeMode = mode; saveSession(res, session); res.json({ authenticated: true, mode, balance: current.balance, currency: current.currency, loginid: current.loginid, account: current, openPnl: 0, accounts: await accountViews(session, accounts) }); } catch (error) { res.status(error.code === 'ACCOUNT_MODE_UNAVAILABLE' ? 409 : 502).json({ error: error.code || 'Account data unavailable', message: error.message }); } });
-const reviewTrade = (req, res) => { const session = getSession(req); if (!session) return res.status(401).json({ error: 'Not authenticated' }); const mode = req.body?.mode === 'real' ? 'real' : 'demo'; const symbol = String(req.body?.symbol || 'R_100'); const contractType = ['CALL', 'PUT'].includes(req.body?.contract_type) ? req.body.contract_type : null; const stake = Number(req.body?.stake); const duration = Number(req.body?.duration); if (!contractType || !/^([A-Z0-9_]+|frx[A-Z]+)$/.test(symbol) || !Number.isFinite(stake) || stake <= 0 || !Number.isFinite(duration) || duration < 1 || duration > 3600) return res.status(400).json({ error: 'Invalid trade parameters' }); res.json({ ok: true, mode, symbol, contractType, stake, duration, execution: 'proposal_only', status: 'pending_review', message: 'Trade proposal created for review. No Deriv contract was purchased.' }); };
+app.post('/api/deriv/proposal', async (req, res) => {
+    const session = getSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated' });
+    const body = req.body || {};
+    const symbol = String(body.symbol || '');
+    const contractType = ['CALL', 'PUT', 'DIGITOVER', 'DIGITUNDER'].includes(body.contractType) ? body.contractType : null;
+    const amount = Number(body.amount);
+    const duration = Number(body.duration);
+    const durationUnit = ['t', 's', 'm'].includes(body.durationUnit) ? body.durationUnit : 't';
+    const currency = /^[A-Z]{3}$/.test(String(body.currency || 'USD')) ? String(body.currency || 'USD') : 'USD';
+    const barrier = Number(body.barrier);
+    const mode = body.mode === 'real' ? 'real' : 'demo';
+    const symbolValid = /^(1HZ\d+V|R_\d+|frx[A-Z]{6})$/.test(symbol);
+    const digitContract = contractType === 'DIGITOVER' || contractType === 'DIGITUNDER';
+    if (!symbolValid || !contractType || !Number.isFinite(amount) || amount < 0.35 || amount > 10000 || !Number.isFinite(duration) || duration < 1 || duration > 365 || (digitContract && (!Number.isFinite(barrier) || barrier < 0 || barrier > 9))) {
+      return res.status(400).json({ error: 'Invalid Deriv proposal parameters' });
+    }
+    try {
+      const payload = { proposal: 1, amount, basis: 'stake', contract_type: contractType, currency, duration, duration_unit: durationUnit, symbol };
+      if (digitContract) payload.barrier = barrier;
+      const result = await requestForMode(session, mode, payload);
+      session.activeMode = mode;
+      saveSession(res, session);
+      const proposal = result.response?.proposal || {};
+      return res.json({ proposal: { id: proposal.id || null, askPrice: proposal.ask_price ?? null, payout: proposal.payout ?? null, spot: proposal.spot ?? null, displayValue: proposal.display_value ?? null, longcode: proposal.longcode ?? null, currency: proposal.currency || currency }, execution: 'proposal-only' });
+    } catch (error) {
+      const status = error.code === 'ACCOUNT_MODE_UNAVAILABLE' ? 409 : 502;
+      return res.status(status).json({ error: error.code || 'DERIV_PROPOSAL_FAILED', message: error.message || 'Unable to request a Deriv proposal.' });
+    }
+    });
+    const reviewTrade = (req, res) => { const session = getSession(req); if (!session) return res.status(401).json({ error: 'Not authenticated' }); const mode = req.body?.mode === 'real' ? 'real' : 'demo'; const symbol = String(req.body?.symbol || 'R_100'); const contractType = ['CALL', 'PUT'].includes(req.body?.contract_type) ? req.body.contract_type : null; const stake = Number(req.body?.stake); const duration = Number(req.body?.duration); if (!contractType || !/^([A-Z0-9_]+|frx[A-Z]+)$/.test(symbol) || !Number.isFinite(stake) || stake <= 0 || !Number.isFinite(duration) || duration < 1 || duration > 3600) return res.status(400).json({ error: 'Invalid trade parameters' }); res.json({ ok: true, mode, symbol, contractType, stake, duration, execution: 'proposal_only', status: 'pending_review', message: 'Trade proposal created for review. No Deriv contract was purchased.' }); };
 app.post('/api/trades', reviewTrade);
 app.post('/api/trades/proposal', reviewTrade);app.post('/api/bot', async (req, res) => { const session = getSession(req); if (!session) return res.status(401).json({ error: 'Not authenticated' }); const action = req.body?.action === 'start' ? 'start' : 'stop'; res.json({ ok: true, message: action === 'start' ? 'Free bot interface started in controlled mode. Live bot execution remains disabled until the bot adapter is separately tested.' : 'Free bot stopped.', execution: 'interface_only' }); });
 app.get('/api/preflight', (req, res) => res.json({ productionBaseUrl: BASE_URL, redirectUri: `${BASE_URL}/oauth/callback`, https: BASE_URL.startsWith('https://'), oauthClientConfigured: Boolean(DERIV_CLIENT_ID), partnerTrackingConfigured: Boolean(DERIV_AFFILIATE_TOKEN), sessionSecretConfigured: Boolean(process.env.SESSION_SECRET), readyForControlledLiveTest: Boolean(BASE_URL.startsWith('https://') && DERIV_CLIENT_ID && DERIV_AFFILIATE_TOKEN && process.env.SESSION_SECRET) }));
