@@ -236,10 +236,10 @@ type BulkScanResult = {
   barrier?: number;
 };
 
-function FloatingMarketAI({ marketQuotes, onSelectMarket, draggable }: { marketQuotes: Record<string, MarketQuote>; onSelectMarket: (label: string) => void; draggable: boolean }) {
+function FloatingMarketAI({ marketQuotes, draggable, openBulkScanner }: { marketQuotes: Record<string, MarketQuote>; draggable: boolean; openBulkScanner: boolean }) {
   const [open, setOpen] = useState(false);
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'complete'>('idle');
-  const [results, setResults] = useState<MarketAiResult[]>([]);
+  const [liveMarketCount, setLiveMarketCount] = useState(0);
   const [position, setPosition] = useState(() => ({
     x: Math.max(16, window.innerWidth - 82),
     y: Math.max(100, window.innerHeight - 150),
@@ -260,7 +260,6 @@ function FloatingMarketAI({ marketQuotes, onSelectMarket, draggable }: { marketQ
   useEffect(() => {
     const handleOpenRequest = () => {
       setOpen(true);
-      scanMarkets();
     };
     window.addEventListener('market-ai-open', handleOpenRequest);
     return () => window.removeEventListener('market-ai-open', handleOpenRequest);
@@ -269,27 +268,7 @@ function FloatingMarketAI({ marketQuotes, onSelectMarket, draggable }: { marketQ
   const scanMarkets = () => {
     setScanState('scanning');
     window.setTimeout(() => {
-      const ranked = VOLATILITY_DEFINITIONS
-        .map((definition) => {
-          const quote = marketQuotes[definition.symbol];
-          const ticks = quote?.ticks ?? [];
-          if (!quote || quote.status !== 'live' || ticks.length < 2) return null;
-          const first = ticks[0];
-          const last = ticks[ticks.length - 1];
-          const range = Math.max(...ticks) - Math.min(...ticks);
-          const base = Math.max(Math.abs(last), 1);
-          const score = ((Math.abs(last - first) + range * 0.35) / base) * 10000;
-          return {
-            definition,
-            quote,
-            score,
-            bias: last > first ? 'RISE' : last < first ? 'FALL' : 'WAIT',
-          } satisfies MarketAiResult;
-        })
-        .filter((result): result is MarketAiResult => result !== null)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 3);
-      setResults(ranked);
+      setLiveMarketCount(MARKET_DEFINITIONS.filter((definition) => marketQuotes[definition.symbol]?.status === 'live').length);
       setScanState('complete');
     }, 650);
   };
@@ -318,8 +297,11 @@ function FloatingMarketAI({ marketQuotes, onSelectMarket, draggable }: { marketQ
       movedRef.current = false;
       return;
     }
+    if (openBulkScanner) {
+      window.dispatchEvent(new CustomEvent('bulk-ai-open'));
+      return;
+    }
     setOpen(true);
-    scanMarkets();
   };
 
   const panelLeft = Math.min(Math.max(12, position.x - 230), Math.max(12, window.innerWidth - 316));
@@ -330,26 +312,25 @@ function FloatingMarketAI({ marketQuotes, onSelectMarket, draggable }: { marketQ
       {open && (
         <section className="market-ai-panel" style={{ left: panelLeft, top: panelTop }} aria-label="Market AI scanner">
           <div className="market-ai-panel-header">
-            <div><span className="market-ai-kicker">MARKET AI</span><strong>Find the best market</strong></div>
+            <div><span className="market-ai-kicker">AI MARKET MATRIX</span><strong>Analysis Dashboard</strong></div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close Market AI">×</button>
           </div>
-          <p>Ranks live volatility markets by recent tick movement and range.</p>
+          <div className="market-ai-matrix-head">Digit Scanner <b>{scanState === 'complete' ? `${liveMarketCount} live markets` : 'Waiting for scan data...'}</b></div>
+          <div className="market-ai-matrix-log">
+            <span>[INFO] Authenticating AI market matrix...</span>
+            <span>[OK] Synthetic stream linked</span>
+            <span>[INFO] Reading volatility clusters...</span>
+            <span className="is-warning">[WARNING] Signal pressure rising</span>
+            <span>[INFO] Checking last digit sequence...</span>
+          </div>
+          <div className={`market-ai-matrix-status ${scanState === 'scanning' ? 'is-scanning' : ''}`}>
+            <span>{scanState === 'complete' ? 'SCAN COMPLETE' : scanState === 'scanning' ? 'SCANNING' : 'STANDBY'}</span>
+            <strong>{scanState === 'complete' ? 'Market matrix ready for bulk execution.' : 'Ready to scan for last-four digit pressure.'}</strong>
+          </div>
           <button type="button" className="market-ai-scan" onClick={scanMarkets} disabled={scanState === 'scanning'}>
-            <Sparkles size={14} /> {scanState === 'scanning' ? 'Scanning live markets…' : 'Scan best market'}
+            <Sparkles size={14} /> {scanState === 'scanning' ? 'Scanning live markets…' : 'Scan for best market'}
           </button>
-          {scanState === 'complete' && (
-            results.length ? (
-              <div className="market-ai-results">
-                {results.map(({ definition, quote, score, bias }) => (
-                  <button key={definition.symbol} type="button" className="market-ai-result" onClick={() => { onSelectMarket(definition.label); setOpen(false); }}>
-                    <span><strong>{definition.name}</strong><small>{bias} bias · score {score.toFixed(1)}</small></span>
-                    <b>{formatMarketPrice(quote.price, quote.pipSize)}</b>
-                  </button>
-                ))}
-              </div>
-            ) : <div className="market-ai-empty">Waiting for enough live ticks to rank the volatility markets.</div>
-          )}
-          <span className="market-ai-note">Review signal only · no trade placed</span>
+          <span className="market-ai-note">Open Bulk Trader to select the signal and execute a confirmed batch.</span>
         </section>
       )}
       <button
@@ -362,7 +343,7 @@ function FloatingMarketAI({ marketQuotes, onSelectMarket, draggable }: { marketQ
         onPointerCancel={handlePointerUp}
         onClick={handleIconClick}
         aria-label="Open Market AI scanner"
-        title={draggable ? 'Drag or scan with Market AI' : 'Scan with Market AI'}
+        title={draggable ? 'Drag or open AI market matrix' : 'Open AI market matrix'}
       >
         <Sparkles size={21} />
         <span>AI</span>
@@ -674,7 +655,7 @@ function Home() {
         <span className="risk-warning"><strong>▲ RISK DISCLAIMER</strong> Trading carries risk; confirm the selected account before execution.</span>
         <span className="footer-brand">PROTRADERS FX · POWERED BY DERIV</span>
       </footer>
-      <FloatingMarketAI marketQuotes={marketQuotes} onSelectMarket={setActiveMarket} draggable={activeTool === 'Manual Trader'} />
+      <FloatingMarketAI marketQuotes={marketQuotes} draggable={activeTool === 'Manual Trader' || activeTool === 'Bulk Trader'} openBulkScanner={activeTool === 'Bulk Trader'} />
     </div>
   );
 }
@@ -1187,6 +1168,11 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     '[INFO] Checking last digit sequence...',
   ]);
   const [executionState, setExecutionState] = useState<'idle' | 'executing'>('idle');
+  useEffect(() => {
+    const handleOpenScanner = () => setScannerOpen(true);
+    window.addEventListener('bulk-ai-open', handleOpenScanner);
+    return () => window.removeEventListener('bulk-ai-open', handleOpenScanner);
+  }, []);
   const digitHistory = useMemo(() => (activeQuote?.ticks ?? []).slice(-12).map((value) => {
     const formatted = formatMarketPrice(value, activeQuote?.pipSize ?? 2);
     return Number(formatted.replace(/\D/g, '').slice(-1));
@@ -1326,12 +1312,8 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
         <label className="bulk-ticks-control"><span>NUMBER OF TICKS</span><input inputMode="numeric" value={numberOfTicks} onChange={(event) => setNumberOfTicks(event.target.value)} /></label>
          <div className="bulk-current-tick"><span>CURRENT TICK</span><strong>{formatMarketPrice(activeQuote?.price ?? null, activeQuote?.pipSize ?? 2)}</strong><small>{activeQuote?.status === 'live' ? '● LIVE' : activeQuote?.price !== null ? 'LAST QUOTE' : 'CONNECTING'}</small><button type="button" onClick={openScanner} disabled={scannerState === 'scanning'}><Sparkles size={12} /> {scannerState === 'scanning' ? 'SCANNING…' : 'AI SCANNER'}</button></div>
         <section className="bulk-ai-scanner" aria-label="Bulk Trader AI scanner">
-          <div className="bulk-ai-scanner-top"><div><span>AI MARKET SCANNER</span><strong>{scannerState === 'complete' ? `${scannerResults.length} ranked markets` : 'Rank live markets before batching'}</strong></div><button type="button" onClick={scanMarkets} disabled={scannerState === 'scanning'}>{scannerState === 'scanning' ? 'Scanning…' : 'Scan now'}</button></div>
-          {scannerState === 'complete' && scannerResults.length > 0 ? (
-            <div className="bulk-ai-results">
-              {scannerResults.map((result) => <button type="button" key={result.definition.symbol} className={`bulk-ai-result ${result.definition.symbol === selectedScannerSymbol ? 'is-selected' : ''}`} onClick={() => { setSelectedScannerSymbol(result.definition.symbol); setActiveMarket(result.definition.label); setBulkSide(result.side === leftChoice ? 'left' : 'right'); }}><span><strong>{result.definition.name}</strong><small>{result.side} · {result.rationale}</small></span><b>{result.confidence.toFixed(1)}%</b></button>)}
-            </div>
-          ) : scannerState === 'complete' ? <p className="bulk-ai-empty">Waiting for enough live ticks to rank markets.</p> : <p className="bulk-ai-empty">Scan the live tick window to select the strongest {tradeType.toLowerCase()} signal.</p>}
+          <div className="bulk-ai-scanner-top"><div><span>AI MARKET MATRIX</span><strong>{scannerState === 'complete' ? 'Analysis ready for trading' : 'Open the floating AI dashboard'}</strong></div><button type="button" onClick={openScanner}>OPEN AI MATRIX</button></div>
+          <p className="bulk-ai-empty">The AI icon opens the digit scanner dashboard. Market rankings stay inside the draggable matrix instead of appearing as volatility cards.</p>
           {selectedScannerResult && <div className="bulk-ai-run"><span>Selected: <b>{selectedScannerResult.definition.name} · {selectedScannerResult.side} · {accountMode}</b></span><button type="button" onClick={handleExecuteAiBatch} disabled={executionState === 'executing'}>{executionState === 'executing' ? 'EXECUTING…' : 'EXECUTE LIVE AI BATCH'}</button></div>}
         </section>
         <div className="bulk-digit-grid">
