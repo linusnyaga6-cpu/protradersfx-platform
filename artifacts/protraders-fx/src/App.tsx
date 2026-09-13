@@ -1173,7 +1173,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   const [scannerLog, setScannerLog] = useState<string[]>([
     '[INFO] Authenticating AI market matrix...',
     '[OK] Synthetic stream linked',
-     '[INFO] Reading digit clusters...',
+    '[INFO] Reading preferred market clusters...',
      '[INFO] Signal pressure rising',
     '[INFO] Checking last digit sequence...',
   ]);
@@ -1195,14 +1195,14 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     return counts.map((count) => ({ count, percentage: digitHistory.length ? (count / total) * 100 : 10 }));
   }, [digitHistory]);
   const scanMarkets = () => {
-    const preferredDefinition = getMarketDefinition(activeMarket);
+    const preferredDefinition = getVolatilityDefinition(getMarketDefinition(activeMarket).name);
     const preferredQuote = marketQuotes[preferredDefinition.symbol];
     setScannerState('scanning');
     setScannerOpen(true);
     setScannerLog([
       '[INFO] Authenticating AI market matrix...',
       '[OK] Synthetic stream linked',
-      '[INFO] Reading digit clusters...',
+      '[INFO] Reading preferred market clusters...',
       '[INFO] Signal pressure rising',
       '[INFO] Checking last digit sequence...',
       '[INFO] Searching live market matrix...',
@@ -1278,6 +1278,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     setReviewState(`Executing ${count} live ${selectedScannerResult.side} trade${count === 1 ? '' : 's'}…`);
     let completed = 0;
     let failed = 0;
+    let firstError = '';
     for (let index = 0; index < count; index += 1) {
       try {
         const response = await fetch('/api/deriv/execute', {
@@ -1295,15 +1296,19 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
             confirm: true,
           }),
         });
-        const payload = await response.json() as { error?: string; trade?: { contractId?: string | number } };
-        if (!response.ok || !payload.trade) throw new Error(payload.error ?? 'Live trade request failed.');
+        const payload = await response.json() as { error?: string; message?: string; trade?: { contractId?: string | number } };
+        if (!response.ok || !payload.trade) throw new Error(payload.message ?? payload.error ?? 'Live trade request failed.');
         completed += 1;
-      } catch {
+      } catch (error) {
         failed += 1;
+        firstError = error instanceof Error ? error.message : 'Live trade request failed.';
+        break;
       }
     }
     setExecutionState('idle');
-    setReviewState(`${completed}/${count} AI live trade${count === 1 ? '' : 's'} opened${failed ? ` · ${failed} failed` : ''}.`);
+    const summary = `${completed}/${count} AI live trade${count === 1 ? '' : 's'} opened${failed ? ` · ${failed} failed` : ''}.`;
+    setReviewState(firstError ? `${summary} ${firstError}` : summary);
+    setScannerLog((current) => [...current, firstError ? `[INFO] Execution stopped: ${firstError}` : `[OK] ${completed} live trade${completed === 1 ? '' : 's'} opened`]);
   };
   const handleBulkReview = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

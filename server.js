@@ -182,7 +182,7 @@ async function requestForMode(session, mode, payload) {
   const accounts = await accountsFor(session);
   const account = selectedAccount(session, mode);
   if (!account) { const error = new Error(`No ${mode} account is linked to this Deriv login`); error.code = 'ACCOUNT_MODE_UNAVAILABLE'; throw error; }
-  return { response: await openOptions(account.token || session.accessToken, account, payload), account, accounts };
+  return { response: await openOptions(session.accessToken, account, payload), account, accounts };
 }
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()) : [BASE_URL];
@@ -287,7 +287,7 @@ app.post('/api/deriv/proposal', async (req, res) => {
         const proposal = result.response?.proposal || {};
         const price = Number(proposal.ask_price);
         if (!proposal.id || !Number.isFinite(price)) throw new Error('Deriv did not return a purchasable proposal.');
-        const tradeResult = await openOptions(result.account.token || session.accessToken, result.account, { buy: proposal.id, price });
+        const tradeResult = await openOptions(session.accessToken, result.account, { buy: proposal.id, price });
         saveSession(res, session);
         const buy = tradeResult?.buy || {};
         const auditData = readData();
