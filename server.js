@@ -290,6 +290,10 @@ app.post('/api/deriv/proposal', async (req, res) => {
         const tradeResult = await openOptions(result.account.token || session.accessToken, result.account, { buy: proposal.id, price });
         saveSession(res, session);
         const buy = tradeResult?.buy || {};
+        const auditData = readData();
+        auditData.events.push({ type: 'live_trade_executed', at: new Date().toISOString(), mode, symbol, contractType, amount, duration, contractId: buy.contract_id || null });
+        if (auditData.events.length > 5000) auditData.events = auditData.events.slice(-5000);
+        writeData(auditData);
         return res.json({ execution: 'live', trade: { contractId: buy.contract_id || null, transactionId: buy.transaction_id || null, buyPrice: buy.buy_price ?? price, currency: proposal.currency || currency }, proposal: { id: proposal.id, askPrice: price, payout: proposal.payout || null, spot: proposal.spot || null } });
       } catch (error) {
         const status = error.code === 'ACCOUNT_MODE_UNAVAILABLE' ? 409 : 502;
