@@ -252,7 +252,7 @@ app.post('/api/deriv/proposal', async (req, res) => {
       return res.status(400).json({ error: 'Invalid Deriv proposal parameters' });
     }
     try {
-      const payload = { proposal: 1, amount, basis: 'stake', contract_type: contractType, currency, duration, duration_unit: durationUnit, symbol };
+      const payload = { proposal: 1, amount, basis: 'stake', contract_type: contractType, currency, duration, duration_unit: durationUnit, underlying_symbol: symbol };
       if (digitContract) payload.barrier = barrier;
       const result = await requestForMode(session, mode, payload);
       session.activeMode = mode;
@@ -281,7 +281,7 @@ app.post('/api/deriv/proposal', async (req, res) => {
       const symbolValid = /^(1HZ\d+V|R_\d+|frx[A-Z]{6})$/.test(symbol);
       if (!symbolValid || !contractType || !Number.isFinite(amount) || amount < 0.35 || amount > 10000 || !Number.isFinite(duration) || duration < 1 || duration > 365 || (digitContract && (!Number.isFinite(barrier) || barrier < 0 || barrier > 9))) return res.status(400).json({ error: 'Invalid Deriv execution parameters' });
       try {
-        const proposalPayload = { proposal: 1, amount, basis: 'stake', contract_type: contractType, currency, duration, duration_unit: durationUnit, symbol };
+        const proposalPayload = { proposal: 1, amount, basis: 'stake', contract_type: contractType, currency, duration, duration_unit: durationUnit, underlying_symbol: symbol };
         if (digitContract) proposalPayload.barrier = barrier;
         const result = await requestForMode(session, mode, proposalPayload);
         const proposal = result.response?.proposal || {};
