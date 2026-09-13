@@ -182,7 +182,7 @@ async function requestForMode(session, mode, payload) {
   const accounts = await accountsFor(session);
   const account = selectedAccount(session, mode);
   if (!account) { const error = new Error(`No ${mode} account is linked to this Deriv login`); error.code = 'ACCOUNT_MODE_UNAVAILABLE'; throw error; }
-  return { response: await openDeriv(account.token || session.accessToken, payload), account, accounts };
+  return { response: await openOptions(account.token || session.accessToken, account, payload), account, accounts };
 }
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()) : [BASE_URL];
