@@ -163,17 +163,39 @@ async function refreshAccounts(session) {
   return accountsFor(session);
 }
 function openOptions(accessToken, account, payload) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const otp = await optionsRequest('/accounts/' + encodeURIComponent(account.account_id) + '/otp', accessToken, { method: 'POST' });
-      const ws = new WebSocket(otp?.url || '');
-      const timer = setTimeout(() => { try { ws.close(); } catch {}; reject(new Error('Deriv trading connection timeout')); }, 15000);
-      ws.on('open', () => ws.send(JSON.stringify(payload)));
-      ws.on('message', (raw) => { let data; try { data = JSON.parse(raw.toString()); } catch { return; } if (data.error) { clearTimeout(timer); try { ws.close(); } catch {}; const error = new Error(data.error.message || 'Deriv trading error'); error.code = data.error.code || 'DERIV_TRADE_ERROR'; reject(error); return; } if (data.msg_type === 'proposal' || data.msg_type === 'buy') { clearTimeout(timer); try { ws.close(); } catch {}; resolve(data); } });
-      ws.on('error', (error) => { clearTimeout(timer); reject(error); }); ws.on('close', () => clearTimeout(timer));
-    } catch (error) { reject(error); }
-  });
-}
+    return new Promise(async (resolve, reject) => {
+      let settled = false;
+      const finish = (callback) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { ws.close(); } catch {}
+        callback();
+      };
+      let ws;
+      const timer = setTimeout(() => finish(() => reject(new Error('Deriv trading connection timeout'))), 15_000);
+      try {
+        const otp = await optionsRequest('/accounts/' + encodeURIComponent(account.account_id) + '/otp', accessToken, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        if (!otp?.url) { const error = new Error('Deriv did not return an OTP WebSocket URL'); error.code = 'OTP_URL_MISSING'; throw error; }
+        ws = new WebSocket(otp.url);
+        ws.on('open', () => ws.send(JSON.stringify(payload)));
+        ws.on('message', (raw) => {
+          let data; try { data = JSON.parse(raw.toString()); } catch { return; }
+          if (data.error) {
+            const error = new Error(data.error.message || 'Deriv trading error');
+            error.code = data.error.code || 'DERIV_TRADE_ERROR';
+            finish(() => reject(error));
+            return;
+          }
+          if (data.msg_type === 'proposal' || data.msg_type === 'buy') finish(() => resolve(data));
+        });
+        ws.on('error', (error) => finish(() => reject(error)));
+        ws.on('close', () => { if (!settled) finish(() => reject(new Error('Deriv trading WebSocket closed before a response'))); });
+      } catch (error) {
+        finish(() => reject(error));
+      }
+    });
+    }
 function selectedAccount(session, mode) {
   const accounts = Array.isArray(session.accounts) ? session.accounts : [];
   return accounts.find((account) => mode === 'demo' ? accountIsDemo(account) : !accountIsDemo(account)) || null;
@@ -280,13 +302,15 @@ app.post('/api/deriv/proposal', async (req, res) => {
       const digitContract = contractType === 'DIGITOVER' || contractType === 'DIGITUNDER';
       const symbolValid = /^(1HZ\d+V|R_\d+|frx[A-Z]{6})$/.test(symbol);
       if (!symbolValid || !contractType || !Number.isFinite(amount) || amount < 0.35 || amount > 10000 || !Number.isFinite(duration) || duration < 1 || duration > 365 || (digitContract && (!Number.isFinite(barrier) || barrier < 0 || barrier > 9))) return res.status(400).json({ error: 'Invalid Deriv execution parameters' });
+      let stage = 'proposal';
       try {
         const proposalPayload = { proposal: 1, amount, basis: 'stake', contract_type: contractType, currency, duration, duration_unit: durationUnit, underlying_symbol: symbol };
-        if (digitContract) proposalPayload.barrier = barrier;
+        if (digitContract) proposalPayload.barrier = String(barrier);
         const result = await requestForMode(session, mode, proposalPayload);
         const proposal = result.response?.proposal || {};
         const price = Number(proposal.ask_price);
         if (!proposal.id || !Number.isFinite(price)) throw new Error('Deriv did not return a purchasable proposal.');
+        stage = 'buy';
         const tradeResult = await openOptions(session.accessToken, result.account, { buy: proposal.id, price });
         saveSession(res, session);
         const buy = tradeResult?.buy || {};
@@ -297,7 +321,7 @@ app.post('/api/deriv/proposal', async (req, res) => {
         return res.json({ execution: 'live', trade: { contractId: buy.contract_id || null, transactionId: buy.transaction_id || null, buyPrice: buy.buy_price ?? price, currency: proposal.currency || currency }, proposal: { id: proposal.id, askPrice: price, payout: proposal.payout || null, spot: proposal.spot || null } });
       } catch (error) {
         const status = error.code === 'ACCOUNT_MODE_UNAVAILABLE' ? 409 : 502;
-        return res.status(status).json({ error: error.code || 'DERIV_EXECUTION_FAILED', message: error.message || 'Unable to execute a Deriv contract.' });
+        return res.status(status).json({ error: error.code || 'DERIV_EXECUTION_FAILED', message: 'Deriv ' + stage + ' failed: ' + (error.message || 'Unable to execute a Deriv contract.') });
       }
     });
     const reviewTrade = (req, res) => { const session = getSession(req); if (!session) return res.status(401).json({ error: 'Not authenticated' }); const mode = req.body?.mode === 'real' ? 'real' : 'demo'; const symbol = String(req.body?.symbol || 'R_100'); const contractType = ['CALL', 'PUT'].includes(req.body?.contract_type) ? req.body.contract_type : null; const stake = Number(req.body?.stake); const duration = Number(req.body?.duration); if (!contractType || !/^([A-Z0-9_]+|frx[A-Z]+)$/.test(symbol) || !Number.isFinite(stake) || stake <= 0 || !Number.isFinite(duration) || duration < 1 || duration > 3600) return res.status(400).json({ error: 'Invalid trade parameters' }); res.json({ ok: true, mode, symbol, contractType, stake, duration, execution: 'proposal_only', status: 'pending_review', message: 'Trade proposal created for review. No Deriv contract was purchased.' }); };
