@@ -1152,7 +1152,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   const [numberOfTicks, setNumberOfTicks] = useState('120');
   const [ticks, setTicks] = useState('1');
   const [stake, setStake] = useState('0.5');
-  const [bulkTrades, setBulkTrades] = useState('1');
+  const [bulkTrades, setBulkTrades] = useState('5');
   const [autoTrader, setAutoTrader] = useState(false);
   const [reviewState, setReviewState] = useState('');
   const [bulkSide, setBulkSide] = useState<'left' | 'right'>('left');
@@ -1311,11 +1311,6 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
         </div>
         <label className="bulk-ticks-control"><span>NUMBER OF TICKS</span><input inputMode="numeric" value={numberOfTicks} onChange={(event) => setNumberOfTicks(event.target.value)} /></label>
          <div className="bulk-current-tick"><span>CURRENT TICK</span><strong>{formatMarketPrice(activeQuote?.price ?? null, activeQuote?.pipSize ?? 2)}</strong><small>{activeQuote?.status === 'live' ? '● LIVE' : activeQuote?.price !== null ? 'LAST QUOTE' : 'CONNECTING'}</small><button type="button" onClick={openScanner} disabled={scannerState === 'scanning'}><Sparkles size={12} /> {scannerState === 'scanning' ? 'SCANNING…' : 'AI SCANNER'}</button></div>
-        <section className="bulk-ai-scanner" aria-label="Bulk Trader AI scanner">
-          <div className="bulk-ai-scanner-top"><div><span>AI MARKET MATRIX</span><strong>{scannerState === 'complete' ? 'Analysis ready for trading' : 'Open the floating AI dashboard'}</strong></div><button type="button" onClick={openScanner}>OPEN AI MATRIX</button></div>
-          <p className="bulk-ai-empty">The AI icon opens the digit scanner dashboard. Market rankings stay inside the draggable matrix instead of appearing as volatility cards.</p>
-          {selectedScannerResult && <div className="bulk-ai-run"><span>Selected: <b>{selectedScannerResult.definition.name} · {selectedScannerResult.side} · {accountMode}</b></span><button type="button" onClick={handleExecuteAiBatch} disabled={executionState === 'executing'}>{executionState === 'executing' ? 'EXECUTING…' : 'EXECUTE LIVE AI BATCH'}</button></div>}
-        </section>
         <div className="bulk-digit-grid">
           {digitCounts.map(({ percentage }, digit) => <div key={digit} className={`bulk-digit digit-${digit}`}><strong>{digit}</strong><span>{percentage.toFixed(2)}%</span></div>)}
         </div>
@@ -1352,6 +1347,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
               <div className="ai-orb"><Sparkles size={17} /><b>AI</b></div>
             </div>
             {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-best"><span>BEST MARKET</span><b>{selectedScannerResult.definition.name}</b><em>{selectedScannerResult.confidence.toFixed(1)}% confidence · {selectedScannerResult.side}</em></div>}
+            {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-trade"><span>{selectedScannerResult.definition.name} · {selectedScannerResult.side} · {accountMode}</span><button type="button" onClick={handleExecuteAiBatch} disabled={executionState === 'executing'}>{executionState === 'executing' ? 'EXECUTING…' : 'EXECUTE LIVE AI BATCH'}</button></div>}
             <button type="button" className="ai-scanner-scan-button" onClick={scanMarkets} disabled={scannerState === 'scanning'}>{scannerState === 'scanning' ? 'SCANNING LIVE MARKETS...' : scannerState === 'complete' ? 'RESCAN MARKET MATRIX' : 'SCAN FOR BEST MARKET'}</button>
           </section>
         </div>

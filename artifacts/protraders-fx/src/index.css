@@ -1276,8 +1276,7 @@
 .ai-scanner-modal { position: relative; width: min(900px, 100%); max-height: calc(100dvh - 44px); overflow: auto; padding: 0 29px 24px; border: 1px solid #00f1f3; border-radius: 7px; color: #b9ffd3; background: linear-gradient(180deg, rgba(0, 6, 6, .98), rgba(0, 15, 14, .98)); box-shadow: 0 0 0 1px rgba(0, 218, 230, .3), 0 0 25px rgba(0, 235, 245, .3), inset 0 0 35px rgba(0, 175, 137, .12); font-family: var(--app-font-mono); }
 .ai-scanner-chrome { display: flex; align-items: center; gap: 9px; height: 42px; margin: 0 -29px; padding: 0 16px; border-bottom: 1px solid rgba(0, 235, 238, .24); background: rgba(0, 13, 14, .7); }
 .ai-scanner-chrome i { width: 12px; height: 12px; border-radius: 50%; background: #fb1c2d; box-shadow: 0 0 10px rgba(251, 28, 45, .5); }
-.ai-scanner-chrome i:nth-child(2) { background: #ffad19; box-shadow: 0 0 10px rgba(255, 173, 25, .45); }
-.ai-scanner-chrome i:nth-child(3) { background: #16d95c; box-shadow: 0 0 10px rgba(22, 217, 92, .45); }
+.ai-scanner-chrome i:nth-child(2), .ai-scanner-chrome i:nth-child(3) { background: #fb1c2d; box-shadow: 0 0 10px rgba(251, 28, 45, .5); }
 .ai-scanner-chrome button { display: grid; place-items: center; width: 31px; height: 31px; margin-left: auto; border: 0; border-radius: 5px; color: #fff; background: #ff1d2e; cursor: pointer; box-shadow: 0 0 13px rgba(255, 29, 46, .3); }
 .ai-scanner-chrome button:hover { background: #ff4957; }
 .ai-scanner-header { padding: 25px 0 12px; }
@@ -1303,6 +1302,11 @@
 .ai-scanner-best { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; margin-top: 10px; padding: 9px 12px; border: 1px solid rgba(0, 230, 223, .6); border-radius: 4px; background: rgba(0, 46, 37, .5); }
 .ai-scanner-best b { color: #eafff2; font-size: 10px; }
 .ai-scanner-best em { color: #8ef7b3; font: 10px var(--app-font-mono); font-style: normal; }
+.ai-scanner-trade { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 8px 10px; border: 1px solid rgba(0, 230, 223, .6); border-radius: 4px; color: #baffcf; background: rgba(0, 29, 24, .78); font: 9px var(--app-font-mono); }
+.ai-scanner-trade span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-scanner-trade button { flex: 0 0 auto; min-height: 28px; padding: 0 10px; border: 1px solid #16f7e6; border-radius: 3px; color: #002d2c; background: #1bf1df; font: 800 8px var(--app-font-mono); cursor: pointer; }
+.ai-scanner-trade button:hover { background: #75fff4; }
+.ai-scanner-trade button:disabled { cursor: wait; opacity: .7; }
 .ai-scanner-scan-button { display: block; width: min(360px, 80%); min-height: 45px; margin: 23px auto 0; border: 1px solid #26ffff; border-radius: 4px; color: #002c2b; background: linear-gradient(180deg, #24ffff, #00b5ae); box-shadow: 0 0 20px rgba(0, 248, 236, .42), inset 0 1px rgba(255, 255, 255, .65); font: 900 12px var(--app-font-mono); cursor: pointer; }
 .ai-scanner-scan-button:hover { background: linear-gradient(180deg, #6dffff, #00ccc1); }
 .ai-scanner-scan-button:disabled { cursor: wait; opacity: .68; }
