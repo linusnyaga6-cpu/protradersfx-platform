@@ -1379,33 +1379,46 @@ function RecoveryBotView({ accountMode, activeMarket, marketQuotes }: { accountM
   const handleRun = async () => {
     if (running) {
       setRunning(false);
-      setProposalMessage('Bot paused. No contract was purchased.');
+      setProposalMessage('Bot paused.');
+      return;
+    }
+    const amount = Number(stake);
+    if (!Number.isFinite(amount) || amount < 0.35) {
+      setProposalState('error');
+      setProposalMessage('Enter a stake of at least USD 0.35.');
+      return;
+    }
+    if (!window.confirm(`Place a LIVE DIGITOVER contract for USD ${amount.toFixed(2)} in ${accountMode} mode? This can lose funds.`)) {
+      setProposalMessage('Live bot trade cancelled.');
       return;
     }
     setProposalState('requesting');
-    setProposalMessage('Requesting a live Deriv proposal…');
+    setProposalMessage('Executing live Deriv trade…');
     try {
-      const response = await fetch('/api/deriv/proposal', {
+      const response = await fetch('/api/deriv/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           symbol: selectedDefinition.symbol,
           contractType: 'DIGITOVER',
-          amount: Number(stake),
+          amount,
           duration: 1,
           durationUnit: 't',
           currency: 'USD',
           barrier: 7,
+          mode: accountMode.toLowerCase(),
+          confirm: true,
         }),
       });
-      const payload = await response.json() as { error?: string; proposal?: { askPrice?: number; payout?: number; currency?: string }; execution?: string };
-      if (!response.ok || !payload.proposal) throw new Error(payload.error ?? 'Deriv did not return a proposal.');
-      setRunning(true);
+      const payload = await response.json() as { error?: string; message?: string; trade?: { contractId?: string | number; buyPrice?: number; currency?: string } };
+      if (!response.ok || !payload.trade) throw new Error(payload.message ?? payload.error ?? 'Deriv did not execute the contract.');
+      setRunning(false);
       setProposalState('ready');
-      setProposalMessage(`Proposal ready · ask ${payload.proposal.askPrice ?? '—'} ${payload.proposal.currency ?? 'USD'} · payout ${payload.proposal.payout ?? '—'} ${payload.proposal.currency ?? 'USD'}. Proposal only; no contract was purchased.`);
+      setProposalMessage(`Live contract opened · ${payload.trade.contractId ?? 'confirmed'} · buy ${payload.trade.buyPrice ?? '—'} ${payload.trade.currency ?? 'USD'}.`);
     } catch (error) {
+      setRunning(false);
       setProposalState('error');
-      setProposalMessage(error instanceof Error ? error.message : 'Unable to request a Deriv proposal.');
+      setProposalMessage(error instanceof Error ? error.message : 'Unable to execute the Deriv contract.');
     }
   };
 
@@ -1428,7 +1441,7 @@ function RecoveryBotView({ accountMode, activeMarket, marketQuotes }: { accountM
         {['▦ Dashboard', '◉ Best Bots', '♙ Bot Builder', '⌁ AI Analysis', '⌁ Analysis', '⟳ Auto Trades', '⌁ Trading View'].map((item) => (
           <button key={item} type="button" className={item.includes('Bot Builder') ? 'is-active' : ''} onClick={() => setSelectedBlock(item.includes('Bot Builder') ? 'Trade parameters' : selectedBlock)}>{item}</button>
         ))}
-        <button type="button" className="recovery-run-top" onClick={handleRun} disabled={proposalState === 'requesting'}>{proposalState === 'requesting' ? '… Requesting' : running ? 'Ⅱ Pause' : '▶ Run'}</button>
+        <button type="button" className="recovery-run-top" onClick={handleRun} disabled={proposalState === 'requesting'}>{proposalState === 'requesting' ? '… Executing' : running ? 'Ⅱ Pause' : '▶ Execute live'}</button>
         <span className={`recovery-running-status ${proposalState === 'error' ? 'is-error' : proposalState === 'ready' ? 'is-ready' : ''}`}>{proposalMessage || (running ? 'Bot is running' : 'Bot is not running')}</span>
       </div>
       <div className="recovery-tools">
@@ -1472,7 +1485,7 @@ function RecoveryBotView({ accountMode, activeMarket, marketQuotes }: { accountM
           <button type="button" className="recovery-reset" onClick={() => { setRunning(false); setProposalState('idle'); setProposalMessage(''); }}>Reset</button>
         </aside>
       </div>
-      <div className="recovery-disclaimer">▲ Risk Disclaimer <span>Live proposal quotes are enabled; no live contract is purchased.</span><span>{accountMode} · Proposal adapter</span></div>
+      <div className="recovery-disclaimer">▲ Risk Disclaimer <span>Live contract execution is enabled; confirm each run before purchase.</span><span>{accountMode} · Live execution</span></div>
     </section>
   );
 }
