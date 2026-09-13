@@ -73,6 +73,8 @@
   },
   "dependencies": {
     "@clerk/react": "^6.14.8",
-    "@clerk/themes": "^2.4.57"
+    "@clerk/themes": "^2.4.57",
+    "react": "19.1.4",
+    "react-dom": "19.1.4"
   }
 }
