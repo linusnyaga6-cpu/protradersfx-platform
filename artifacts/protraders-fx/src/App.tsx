@@ -1189,10 +1189,6 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     return counts.map((count) => ({ count, percentage: digitHistory.length ? (count / total) * 100 : 10 }));
   }, [digitHistory]);
   const scanMarkets = () => {
-    if (scannerState === 'complete' && selectedScannerResult) {
-      void handleExecuteAiBatch();
-      return;
-    }
     const preferredDefinition = getVolatilityDefinition(getMarketDefinition(activeMarket).name);
     const preferredQuote = marketQuotes[preferredDefinition.symbol];
     setScannerState('scanning');
@@ -1258,12 +1254,14 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
         `[OK] ${ticks.length} digits analyzed on ${preferredDefinition.name}`,
         `[OK] Signal: ${result.side} · ${result.confidence.toFixed(1)}% confidence`,
       ]);
+       window.setTimeout(() => { void handleExecuteAiBatch(result); }, 250);
     }, 450);
   };
   const openScanner = () => setScannerOpen(true);
   const selectedScannerResult = scannerResults.find((result) => result.definition.symbol === selectedScannerSymbol);
-  const handleExecuteAiBatch = async () => {
-    if (!selectedScannerResult || executionState === 'executing') return;
+  const handleExecuteAiBatch = async (scanResult?: BulkScanResult) => {
+    const executionResult = scanResult ?? selectedScannerResult;
+    if (!executionResult || executionState === 'executing') return;
     const amount = Number(stake);
     const duration = Math.max(1, Number(ticks) || 1);
     const count = Math.min(20, Math.max(1, Number(bulkTrades) || 1));
@@ -1272,7 +1270,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
       return;
     }
     setExecutionState('executing');
-    setReviewState(`Executing ${count} live ${selectedScannerResult.side} trade${count === 1 ? '' : 's'}…`);
+    setReviewState(`Executing ${count} live ${executionResult.side} trade${count === 1 ? '' : 's'}…`);
     let completed = 0;
     let failed = 0;
     let firstError = '';
@@ -1282,13 +1280,13 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            symbol: selectedScannerResult.definition.symbol,
-            contractType: selectedScannerResult.contractType,
+            symbol: executionResult.definition.symbol,
+            contractType: executionResult.contractType,
             amount,
             duration,
             durationUnit: 't',
             currency: 'USD',
-            barrier: selectedScannerResult.barrier,
+            barrier: executionResult.barrier,
             mode: accountMode.toLowerCase(),
             confirm: true,
           }),
@@ -1362,9 +1360,9 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
             </div>
             {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-best"><span>DIGIT SIGNAL</span><b>{selectedScannerResult.side}</b><em>{selectedScannerResult.confidence.toFixed(1)}% confidence · {selectedScannerResult.sampleSize} ticks</em></div>}
             {scannerState === 'complete' && <div className="ai-scanner-digits" aria-label="Digit scan results">{scannerDigits.map(({ digit, percentage }) => <div key={digit} className={latestBulkDigit === String(digit) ? 'is-latest' : ''}><strong>{digit}</strong><span>{percentage.toFixed(1)}%</span></div>)}</div>}
-            {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-trade"><span>{selectedScannerResult.definition.name} · {selectedScannerResult.side} · {accountMode}</span><em>Press scan again to execute</em></div>}
+            {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-trade"><span>{selectedScannerResult.definition.name} · {selectedScannerResult.side} · {accountMode}</span><em>Execution started automatically</em></div>}
             {reviewState && <div className="ai-scanner-execution-state" role="status">{reviewState}</div>}
-            <button type="button" className="ai-scanner-scan-button" onClick={scanMarkets} disabled={scannerState === 'scanning' || executionState === 'executing'}>{scannerState === 'scanning' ? 'SCANNING LIVE MARKETS...' : scannerState === 'complete' ? 'EXECUTE SCANNED MARKET' : 'SCAN THE MARKET'}</button>
+            <button type="button" className="ai-scanner-scan-button" onClick={scanMarkets} disabled={scannerState === 'scanning' || executionState === 'executing'}>{scannerState === 'scanning' ? 'SCANNING LIVE MARKETS...' : scannerState === 'complete' ? 'SCAN AGAIN' : 'SCAN THE MARKET'}</button>
           </section>
         </div>
       )}
