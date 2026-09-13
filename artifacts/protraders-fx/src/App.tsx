@@ -1379,6 +1379,9 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
   const [running, setRunning] = useState(false);
   const [proposalState, setProposalState] = useState<'idle' | 'requesting' | 'ready' | 'error'>('idle');
   const [proposalMessage, setProposalMessage] = useState('');
+  const [summaryTab, setSummaryTab] = useState<'Summary' | 'Transactions' | 'Journal' | 'Results'>('Summary');
+  const [lastTrade, setLastTrade] = useState<{ contractId?: string | number; buyPrice?: number; currency?: string } | null>(null);
+  const [journalEntries, setJournalEntries] = useState<string[]>([]);
   const [selectedBlock, setSelectedBlock] = useState('Trade parameters');
   const [stake, setStake] = useState('10');
   const [takeProfit, setTakeProfit] = useState('50');
@@ -1403,8 +1406,9 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
       setProposalMessage('Enter a stake of at least USD 0.35.');
       return;
     }
+    setRunning(true);
     setProposalState('requesting');
-    setProposalMessage('Executing live Deriv trade…');
+    setProposalMessage('Running bot on the selected Deriv market…');
     try {
       const response = await fetch('/api/deriv/execute', {
         method: 'POST',
@@ -1425,10 +1429,14 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
       if (!response.ok || !payload.trade) throw new Error(payload.message ?? payload.error ?? 'Deriv did not execute the contract.');
       setRunning(false);
       setProposalState('ready');
-      setProposalMessage(`Live contract opened · ${payload.trade.contractId ?? 'confirmed'} · buy ${payload.trade.buyPrice ?? '—'} ${payload.trade.currency ?? 'USD'}.`);
+      setLastTrade(payload.trade);
+      setSummaryTab('Results');
+      setJournalEntries((current) => [...current, `Bot run completed · contract ${payload.trade?.contractId ?? 'confirmed'} · ${selectedDefinition.name}`]);
+      setProposalMessage(`Bot completed · contract ${payload.trade.contractId ?? 'confirmed'} · buy ${payload.trade.buyPrice ?? '—'} ${payload.trade.currency ?? 'USD'}.`);
     } catch (error) {
       setRunning(false);
       setProposalState('error');
+      setJournalEntries((current) => [...current, `Bot run failed · ${error instanceof Error ? error.message : 'Unable to execute the Deriv contract.'}`]);
       setProposalMessage(error instanceof Error ? error.message : 'Unable to execute the Deriv contract.');
     }
   };
@@ -1452,7 +1460,7 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
         {['▦ Dashboard', '◉ Best Bots', '♙ Bot Builder', '⌁ AI Analysis', '⌁ Analysis', '⟳ Auto Trades', '⌁ Trading View'].map((item) => (
           <button key={item} type="button" className={item.includes('Bot Builder') ? 'is-active' : ''} onClick={() => setSelectedBlock(item.includes('Bot Builder') ? 'Trade parameters' : selectedBlock)}>{item}</button>
         ))}
-        <button type="button" className="recovery-run-top" onClick={handleRun} disabled={proposalState === 'requesting'}>{proposalState === 'requesting' ? '… Executing' : running ? 'Ⅱ Pause' : '▶ Execute live'}</button>
+        <button type="button" className="recovery-run-top" onClick={handleRun} disabled={proposalState === 'requesting'}>{proposalState === 'requesting' ? '… Running bot' : running ? 'Ⅱ Pause' : '▶ Run Bot'}</button>
         <span className={`recovery-running-status ${proposalState === 'error' ? 'is-error' : proposalState === 'ready' ? 'is-ready' : ''}`}>{proposalMessage || (running ? 'Bot is running' : 'Bot is not running')}</span>
       </div>
       <div className="recovery-tools">
@@ -1488,12 +1496,19 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
           <div className="recovery-trash">▰</div>
         </div>
         <aside className="recovery-summary">
-          <div className="recovery-summary-tabs"><button className="is-active" type="button">Summary</button><button type="button">Transactions</button><button type="button">Journal</button></div>
-          <div className="recovery-empty"><p>When you’re ready to trade, hit <strong>Run</strong>.<br />You’ll be able to track your bot’s<br />performance here.</p></div>
-          <div className="recovery-metrics">
-            {['Total stake', 'Total payout', 'No. of runs', 'Contracts lost', 'Contracts won', 'Total profit/loss'].map((label) => <div key={label}><strong>{label}</strong><span>{label.includes('profit') ? '0.00 USD' : label.includes('stake') || label.includes('payout') ? '0.00 USD' : '0'}</span></div>)}
+          <div className="recovery-summary-tabs">
+            {(['Summary', 'Transactions', 'Journal', 'Results'] as const).map((tab) => <button key={tab} className={summaryTab === tab ? 'is-active' : ''} type="button" onClick={() => setSummaryTab(tab)}>{tab}</button>)}
           </div>
-          <button type="button" className="recovery-reset" onClick={() => { setRunning(false); setProposalState('idle'); setProposalMessage(''); }}>Reset</button>
+          {summaryTab === 'Summary' && <>
+            <div className="recovery-empty"><p>When you’re ready to trade, hit <strong>Run Bot</strong>.<br />You’ll be able to track your bot’s<br />performance here.</p></div>
+            <div className="recovery-metrics">
+              {['Total stake', 'Total payout', 'No. of runs', 'Contracts lost', 'Contracts won', 'Total profit/loss'].map((label) => <div key={label}><strong>{label}</strong><span>{label.includes('profit') ? '0.00 USD' : label.includes('stake') || label.includes('payout') ? '0.00 USD' : '0'}</span></div>)}
+            </div>
+          </>}
+          {summaryTab === 'Transactions' && <div className="recovery-tab-content"><strong>Transactions</strong>{lastTrade ? <p>Contract {lastTrade.contractId ?? 'confirmed'}<br />Buy {lastTrade.buyPrice ?? '—'} {lastTrade.currency ?? currency}</p> : <p>No bot transactions yet.</p>}</div>}
+          {summaryTab === 'Journal' && <div className="recovery-tab-content"><strong>Journal</strong>{journalEntries.length ? journalEntries.slice(-5).map((entry, index) => <p key={`${entry}-${index}`}>{entry}</p>) : <p>Your bot activity journal will appear here after you run the bot.</p>}</div>}
+          {summaryTab === 'Results' && <div className="recovery-tab-content"><strong>Results</strong>{lastTrade ? <p className="recovery-result-success">Bot completed successfully<br /><b>Contract {lastTrade.contractId ?? 'confirmed'}</b><br />Buy {lastTrade.buyPrice ?? '—'} {lastTrade.currency ?? currency}</p> : <p>Run the bot to see the latest result.</p>}</div>}
+          <button type="button" className="recovery-reset" onClick={() => { setRunning(false); setProposalState('idle'); setProposalMessage(''); setLastTrade(null); setJournalEntries([]); setSummaryTab('Summary'); }}>Reset</button>
         </aside>
       </div>
       <div className="recovery-disclaimer">▲ Risk Disclaimer <span>Live contract execution is enabled; confirm each run before purchase.</span><span>{accountMode} · Live execution</span></div>
