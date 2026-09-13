@@ -247,7 +247,7 @@ app.get('/workspace', (req, res) => res.type('html').send(CANONICAL_INDEX));
 app.get('/workspace.html', (req, res) => res.type('html').send(CANONICAL_INDEX));
 for (const page of ['marketplace', 'course', 'signals', 'manual', 'builder']) app.get(`/${page}`, (req, res) => res.type('html').send(CANONICAL_INDEX));
 app.get('/', (req, res) => res.type('html').send(CANONICAL_INDEX));
-app.get('/assets/index-BOMDWuLA.js', (req, res) => res.type('application/javascript').send(LEGACY_FRONTEND_APP.replace('gx=Pw(window.location.hostname,\"pk_test_bWFueS1nbnUtOTQ1Ni5jbGVyay5hY2NvdW50cy5kZXYk\")', 'gx=\"\"')));
+app.get('/assets/index-BOMDWuLA.js', (req, res) => res.set('Cache-Control', 'no-store').type('application/javascript').send(LEGACY_FRONTEND_APP.replace(/gx=Pw\(window\.location\.hostname,"pk_test_[^"]+"\)/g, 'gx=""')));
 app.use(express.static(PUBLIC_DIR, { extensions: ['html'] }));
 app.get('*', (req, res) => res.type('html').send(CANONICAL_INDEX));
 app.use((error, req, res, next) => { console.error(error); res.status(500).json({ error: 'Internal server error' }); });
