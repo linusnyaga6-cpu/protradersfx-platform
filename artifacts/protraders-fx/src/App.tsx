@@ -1178,6 +1178,14 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   const [scannerState, setScannerState] = useState<'idle' | 'scanning' | 'complete'>('idle');
   const [scannerResults, setScannerResults] = useState<BulkScanResult[]>([]);
   const [selectedScannerSymbol, setSelectedScannerSymbol] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerLog, setScannerLog] = useState<string[]>([
+    '[INFO] Authenticating AI market matrix...',
+    '[OK] Synthetic stream linked',
+    '[INFO] Reading volatility clusters...',
+    '[WARNING] Signal pressure rising',
+    '[INFO] Checking last digit sequence...',
+  ]);
   const [executionState, setExecutionState] = useState<'idle' | 'executing'>('idle');
   const digitHistory = useMemo(() => (activeQuote?.ticks ?? []).slice(-12).map((value) => {
     const formatted = formatMarketPrice(value, activeQuote?.pipSize ?? 2);
@@ -1191,6 +1199,15 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   }, [digitHistory]);
   const scanMarkets = () => {
     setScannerState('scanning');
+    setScannerOpen(true);
+    setScannerLog([
+      '[INFO] Authenticating AI market matrix...',
+      '[OK] Synthetic stream linked',
+      '[INFO] Reading volatility clusters...',
+      '[WARNING] Signal pressure rising',
+      '[INFO] Checking last digit sequence...',
+      '[INFO] Searching live market matrix...',
+    ]);
     window.setTimeout(() => {
       const ranked = MARKET_DEFINITIONS.map((definition): BulkScanResult | null => {
         const quote = marketQuotes[definition.symbol];
@@ -1237,8 +1254,14 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
       setScannerResults(ranked);
       setSelectedScannerSymbol(ranked[0]?.definition.symbol ?? '');
       setScannerState('complete');
+      setScannerLog((current) => [
+        ...current,
+        ranked.length ? `[OK] ${ranked.length} market${ranked.length === 1 ? '' : 's'} ranked by signal confidence` : '[WARNING] Waiting for enough live ticks...',
+        ranked[0] ? `[OK] Best market: ${ranked[0].definition.name} · ${ranked[0].side}` : '[INFO] Keep the scanner open for more tick data',
+      ]);
     }, 450);
   };
+  const openScanner = () => setScannerOpen(true);
   const selectedScannerResult = scannerResults.find((result) => result.definition.symbol === selectedScannerSymbol);
   const handleExecuteAiBatch = async () => {
     if (!selectedScannerResult || executionState === 'executing') return;
@@ -1301,7 +1324,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
           <label><span>TRADE TYPE</span><select value={tradeType} onChange={(event) => setTradeType(event.target.value)}><option>Even/Odd</option><option>Rise/Fall</option><option>Over/Under</option></select></label>
         </div>
         <label className="bulk-ticks-control"><span>NUMBER OF TICKS</span><input inputMode="numeric" value={numberOfTicks} onChange={(event) => setNumberOfTicks(event.target.value)} /></label>
-        <div className="bulk-current-tick"><span>CURRENT TICK</span><strong>{formatMarketPrice(activeQuote?.price ?? null, activeQuote?.pipSize ?? 2)}</strong><small>{activeQuote?.status === 'live' ? '● LIVE' : activeQuote?.price !== null ? 'LAST QUOTE' : 'CONNECTING'}</small><button type="button" onClick={scanMarkets} disabled={scannerState === 'scanning'}><Sparkles size={12} /> {scannerState === 'scanning' ? 'SCANNING…' : 'AI SCANNER'}</button></div>
+         <div className="bulk-current-tick"><span>CURRENT TICK</span><strong>{formatMarketPrice(activeQuote?.price ?? null, activeQuote?.pipSize ?? 2)}</strong><small>{activeQuote?.status === 'live' ? '● LIVE' : activeQuote?.price !== null ? 'LAST QUOTE' : 'CONNECTING'}</small><button type="button" onClick={openScanner} disabled={scannerState === 'scanning'}><Sparkles size={12} /> {scannerState === 'scanning' ? 'SCANNING…' : 'AI SCANNER'}</button></div>
         <section className="bulk-ai-scanner" aria-label="Bulk Trader AI scanner">
           <div className="bulk-ai-scanner-top"><div><span>AI MARKET SCANNER</span><strong>{scannerState === 'complete' ? `${scannerResults.length} ranked markets` : 'Rank live markets before batching'}</strong></div><button type="button" onClick={scanMarkets} disabled={scannerState === 'scanning'}>{scannerState === 'scanning' ? 'Scanning…' : 'Scan now'}</button></div>
           {scannerState === 'complete' && scannerResults.length > 0 ? (
@@ -1326,6 +1349,31 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
         </div>
         <div className="bulk-bottom-row"><button type="button" className={`bulk-auto-button ${autoTrader ? 'is-on' : ''}`} onClick={() => setAutoTrader(!autoTrader)}><Settings2 size={12} /> {autoTrader ? 'Live auto mode on' : 'Live auto mode'}</button>{reviewState && <span role="status">{reviewState}</span>}</div>
       </form>
+      {scannerOpen && (
+        <div className="ai-scanner-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setScannerOpen(false); }}>
+          <section className="ai-scanner-modal" role="dialog" aria-modal="true" aria-labelledby="ai-scanner-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="ai-scanner-chrome" aria-hidden="true"><i /><i /><i /><button type="button" onClick={() => setScannerOpen(false)} aria-label="Close AI scanner"><X size={17} /></button></div>
+            <div className="ai-scanner-header">
+              <span>AI MARKET MATRIX</span>
+              <h2 id="ai-scanner-title">Analysis Dashboard - Digit Scanner</h2>
+            </div>
+            <div className="ai-scanner-inputs">
+              <label><span>STAKE</span><input inputMode="decimal" value={stake} onChange={(event) => setStake(event.target.value)} /></label>
+              <label><span>NO. OF BULK TRADES</span><input inputMode="numeric" value={bulkTrades} onChange={(event) => setBulkTrades(event.target.value)} /></label>
+            </div>
+            <div className="ai-scanner-markets"><span>Markets</span><b>{scannerState === 'complete' ? `${scannerResults.length} ranked markets` : 'Waiting for scan data...'}</b></div>
+            <div className="ai-scanner-log" aria-live="polite">
+              {scannerLog.map((line, index) => <div key={`${line}-${index}`} className={line.includes('[WARNING]') ? 'is-warning' : line.includes('[OK]') ? 'is-ok' : ''}>{line}</div>)}
+            </div>
+            <div className={`ai-scanner-status ${scannerState === 'scanning' ? 'is-scanning' : ''}`}>
+              <div><span>{scannerState === 'complete' ? 'SCAN COMPLETE' : scannerState === 'scanning' ? 'SCANNING' : 'STANDBY'}</span><strong>{scannerState === 'complete' && selectedScannerResult ? `${selectedScannerResult.definition.name} · ${selectedScannerResult.side}` : scannerState === 'scanning' ? 'Reading live market pressure...' : 'Ready to scan for last-four digit pressure.'}</strong></div>
+              <div className="ai-orb"><Sparkles size={17} /><b>AI</b></div>
+            </div>
+            {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-best"><span>BEST MARKET</span><b>{selectedScannerResult.definition.name}</b><em>{selectedScannerResult.confidence.toFixed(1)}% confidence · {selectedScannerResult.side}</em></div>}
+            <button type="button" className="ai-scanner-scan-button" onClick={scanMarkets} disabled={scannerState === 'scanning'}>{scannerState === 'scanning' ? 'SCANNING LIVE MARKETS...' : scannerState === 'complete' ? 'RESCAN MARKET MATRIX' : 'SCAN FOR BEST MARKET'}</button>
+          </section>
+        </div>
+      )}
     </section>
   );
 }
