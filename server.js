@@ -238,7 +238,7 @@ app.post('/api/deriv/proposal', async (req, res) => {
     if (!session) return res.status(401).json({ error: 'Not authenticated' });
     const body = req.body || {};
     const symbol = String(body.symbol || '');
-    const contractType = ['CALL', 'PUT', 'DIGITOVER', 'DIGITUNDER'].includes(body.contractType) ? body.contractType : null;
+    const contractType = ['CALL', 'PUT', 'DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD'].includes(body.contractType) ? body.contractType : null;
     const amount = Number(body.amount);
     const duration = Number(body.duration);
     const durationUnit = ['t', 's', 'm'].includes(body.durationUnit) ? body.durationUnit : 't';
@@ -246,7 +246,7 @@ app.post('/api/deriv/proposal', async (req, res) => {
     const barrier = Number(body.barrier);
     const mode = body.mode === 'real' ? 'real' : 'demo';
     const symbolValid = /^(1HZ\d+V|R_\d+|frx[A-Z]{6})$/.test(symbol);
-    const digitContract = contractType === 'DIGITOVER' || contractType === 'DIGITUNDER';
+    const digitContract = contractType === 'DIGITOVER' || contractType === 'DIGITUNDER' || contractType === 'DIGITEVEN' || contractType === 'DIGITODD';
     if (!symbolValid || !contractType || !Number.isFinite(amount) || amount < 0.35 || amount > 10000 || !Number.isFinite(duration) || duration < 1 || duration > 365 || (digitContract && (!Number.isFinite(barrier) || barrier < 0 || barrier > 9))) {
       return res.status(400).json({ error: 'Invalid Deriv proposal parameters' });
     }
