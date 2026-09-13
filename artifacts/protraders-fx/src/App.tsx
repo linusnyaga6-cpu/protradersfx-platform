@@ -1254,8 +1254,8 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
         `[OK] ${ticks.length} digits analyzed on ${preferredDefinition.name}`,
         `[OK] Signal: ${result.side} · ${result.confidence.toFixed(1)}% confidence`,
       ]);
-       window.setTimeout(() => { void handleExecuteAiBatch(result); }, 250);
-    }, 450);
+       window.setTimeout(() => { void handleExecuteAiBatch(result); }, 50);
+     }, 180);
   };
   const openScanner = () => setScannerOpen(true);
   const selectedScannerResult = scannerResults.find((result) => result.definition.symbol === selectedScannerSymbol);
@@ -1274,6 +1274,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     let completed = 0;
     let failed = 0;
     let firstError = '';
+    const executionResults: string[] = [];
     for (let index = 0; index < count; index += 1) {
       try {
         const response = await fetch('/api/deriv/execute', {
@@ -1291,9 +1292,12 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
             confirm: true,
           }),
         });
-        const payload = await response.json() as { error?: string; message?: string; trade?: { contractId?: string | number } };
+        const payload = await response.json() as { error?: string; message?: string; trade?: { contractId?: string | number; buyPrice?: number; currency?: string } };
         if (!response.ok || !payload.trade) throw new Error(payload.message ?? payload.error ?? 'Live trade request failed.');
         completed += 1;
+        const executionResultText = `contract ${payload.trade.contractId ?? 'confirmed'} · buy ${payload.trade.buyPrice ?? '—'} ${payload.trade.currency ?? currency}`;
+        executionResults.push(executionResultText);
+        setScannerLog((current) => [...current, `[OK] ${executionResultText}`]);
       } catch (error) {
         failed += 1;
         firstError = error instanceof Error ? error.message : 'Live trade request failed.';
@@ -1302,7 +1306,8 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     }
     setExecutionState('idle');
     const summary = `${completed}/${count} AI live trade${count === 1 ? '' : 's'} opened${failed ? ` · ${failed} failed` : ''}.`;
-    setReviewState(firstError ? `${summary} ${firstError}` : summary);
+    const resultSummary = executionResults.length ? ` ${executionResults.join(' · ')}` : '';
+    setReviewState(firstError ? `${summary} ${firstError}` : `${summary}${resultSummary}`);
     setScannerLog((current) => [...current, firstError ? `[INFO] Execution stopped: ${firstError}` : `[OK] ${completed} live trade${completed === 1 ? '' : 's'} opened`]);
   };
   const handleBulkReview = (event: FormEvent<HTMLFormElement>) => {
