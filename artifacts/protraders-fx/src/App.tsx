@@ -850,26 +850,31 @@ function SignalAiView({ activeMarket, setActiveMarket, marketQuotes, onNavigate 
 }
 
 function ApexBotView({ activeMarket, setActiveMarket, marketQuotes }: { activeMarket: string; setActiveMarket: (market: string) => void; marketQuotes: Record<string, MarketQuote> }) {
-  const [running, setRunning] = useState(false);
   const [stake, setStake] = useState('1');
   const [takeProfit, setTakeProfit] = useState('10');
   const [stopLoss, setStopLoss] = useState('5');
   const [strategy, setStrategy] = useState('Digits momentum');
-  const [reviewState, setReviewState] = useState('');
   const definition = getMarketDefinition(activeMarket);
   const quote = marketQuotes[definition.symbol];
-
-  const toggleBot = () => {
-    setRunning((current) => !current);
-    setReviewState(running ? 'Apex Bot paused. No contract was purchased.' : `Apex Bot review mode started on ${definition.label}.`);
-  };
+  const ticks = quote?.ticks.slice(-120) ?? [];
+  const latestTick = ticks.at(-1) ?? null;
+  const firstTick = ticks[0] ?? latestTick;
+  const latestDigit = latestTick === null ? '—' : formatMarketPrice(latestTick, quote?.pipSize ?? 2).replace(/\D/g, '').slice(-1);
+  const momentum = firstTick !== null && latestTick !== null && latestTick !== firstTick ? latestTick > firstTick ? 'RISING' : 'FALLING' : 'FLAT';
+  const evenCount = ticks.reduce((total, tick) => {
+    const digit = Number(formatMarketPrice(tick, quote?.pipSize ?? 2).replace(/\D/g, '').slice(-1));
+    return total + (digit % 2 === 0 ? 1 : 0);
+  }, 0);
+  const evenProbability = ticks.length ? (evenCount / ticks.length) * 100 : 0;
+  const confidence = ticks.length ? Math.max(evenProbability, 100 - evenProbability) : 0;
+  const resultLabel = strategy === 'Rise / Fall trend' ? momentum : strategy === 'Over / Under pressure' ? (latestDigit !== '—' && Number(latestDigit) > 4 ? 'OVER' : 'UNDER') : evenProbability >= 50 ? 'EVEN' : 'ODD';
 
   return (
     <section className="strategy-workspace apex-bot-workspace">
       <div className="strategy-workspace-main">
         <header className="strategy-workspace-header">
-          <div><span className="terminal-eyebrow">APEX BOT · STRATEGY RUNNER</span><h1>Build a disciplined bot session</h1><p>Configure a compact strategy, watch the live market context, and review the next proposal without live execution.</p></div>
-          <span className={`strategy-status-pill ${running ? 'is-active' : ''}`}><i /> {running ? 'RUNNING IN REVIEW' : 'READY'}</span>
+          <div><span className="terminal-eyebrow">APEX BOT · RESULTS</span><h1>See the latest bot result</h1><p>Configure a compact strategy and view its live result snapshot as official Deriv ticks arrive.</p></div>
+          <span className="strategy-status-pill is-active"><i /> RESULTS LIVE</span>
         </header>
         <div className="apex-bot-grid">
           <section className="strategy-config-card">
@@ -881,22 +886,30 @@ function ApexBotView({ activeMarket, setActiveMarket, marketQuotes }: { activeMa
               <label><span>TAKE PROFIT</span><input inputMode="decimal" value={takeProfit} onChange={(event) => setTakeProfit(event.target.value)} /></label>
             </div>
             <label><span>STOP LOSS</span><input inputMode="decimal" value={stopLoss} onChange={(event) => setStopLoss(event.target.value)} /></label>
-            <button type="button" className={`strategy-primary-button ${running ? 'is-danger' : ''}`} onClick={toggleBot}>{running ? 'Pause Apex Bot' : 'Run Apex Bot'} <Bot size={14} /></button>
-            {reviewState && <span className="strategy-review-state" role="status">{reviewState}</span>}
+            <div className="apex-results-callout"><span>RESULT</span><strong>{resultLabel}</strong><small>{confidence.toFixed(1)}% confidence · {ticks.length} ticks analyzed</small></div>
           </section>
           <section className="apex-bot-preview">
             <div className="strategy-card-heading"><span className="strategy-card-kicker">LIVE CONTEXT</span><strong>{definition.name}</strong></div>
             <div className="apex-price">{formatMarketPrice(quote?.price ?? null, quote?.pipSize ?? 2)} <small>{quote?.status === 'live' ? 'LIVE' : 'LAST QUOTE'}</small></div>
             <div className="apex-mini-chart">{(quote?.ticks.slice(-28) ?? []).map((tick, index, values) => <i key={`${tick}-${index}`} style={{ height: `${20 + ((tick - Math.min(...values)) / Math.max(Math.max(...values) - Math.min(...values), .0001)) * 68}%` }} />)}</div>
-            <div className="apex-stat-row"><span>Strategy<strong>{strategy}</strong></span><span>Risk<strong>{stake} USD / trade</strong></span><span>Mode<strong>Review only</strong></span></div>
+            <div className="apex-stat-row"><span>Strategy<strong>{strategy}</strong></span><span>Last digit<strong>{latestDigit}</strong></span><span>Mode<strong>Results only</strong></span></div>
           </section>
         </div>
+        <section className="apex-results-panel">
+          <div className="strategy-card-heading"><span className="strategy-card-kicker">APEX RESULT SNAPSHOT</span><strong>What the bot sees now</strong></div>
+          <div className="apex-results-grid">
+            <div><span>Signal</span><strong>{resultLabel}</strong><small>Derived from the current strategy</small></div>
+            <div><span>Momentum</span><strong>{momentum}</strong><small>First tick versus latest tick</small></div>
+            <div><span>Even probability</span><strong>{evenProbability.toFixed(1)}%</strong><small>{evenCount} of {ticks.length || 0} recent digits</small></div>
+            <div><span>Last digit</span><strong>{latestDigit}</strong><small>Latest official quote</small></div>
+          </div>
+        </section>
       </div>
       <aside className="strategy-side-panel">
-        <div className="strategy-side-kicker">APEX SAFETY PANEL</div>
-        <h2>Proposal checkpoint</h2>
-        <p>The bot can be configured and paused here. A live Deriv contract is never purchased from this workspace.</p>
-        <div className="strategy-check-list"><span>✓ Official tick context</span><span>✓ Stake guardrail</span><span>✓ Review-only execution</span></div>
+        <div className="strategy-side-kicker">APEX RESULTS</div>
+        <h2>Results are ready</h2>
+        <p>Clicking Apex Bot shows the current result snapshot immediately. It does not start a review loop or purchase a contract.</p>
+        <div className="strategy-check-list"><span>✓ Official tick context</span><span>✓ Live result snapshot</span><span>✓ No automatic execution</span></div>
         <button type="button" className="strategy-secondary-button" onClick={() => window.dispatchEvent(new Event('market-ai-open'))}>Open Market AI <Sparkles size={14} /></button>
       </aside>
     </section>

@@ -2431,6 +2431,16 @@
 .apex-stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .apex-stat-row span { display: grid; gap: 4px; color: #819095; font: 7px var(--app-font-mono); }
 .apex-stat-row strong { color: #50646b; font-size: 8px; }
+.apex-results-callout { display: grid; gap: 4px; margin-top: 12px; padding: 10px; border: 1px solid #14aab4; border-radius: 4px; color: #148a94; background: #effcfc; }
+.apex-results-callout span, .apex-results-panel .strategy-card-kicker { color: #159aa5; font: 800 8px var(--app-font-mono); letter-spacing: .08em; }
+.apex-results-callout strong { color: #123f48; font: 900 16px var(--app-font-mono); }
+.apex-results-callout small { color: #688087; font: 8px var(--app-font-mono); }
+.apex-results-panel { margin-top: 12px; padding: 14px; border: 1px solid #dce8ea; border-radius: 5px; background: #f8fcfc; }
+.apex-results-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+.apex-results-grid > div { display: grid; gap: 4px; min-height: 72px; padding: 10px; border: 1px solid #d9e9eb; border-radius: 4px; background: #fff; }
+.apex-results-grid span { color: #70848b; font: 8px var(--app-font-mono); text-transform: uppercase; }
+.apex-results-grid strong { color: #163f48; font: 900 13px var(--app-font-mono); }
+.apex-results-grid small { color: #8b9ca1; font: 7px/1.3 var(--app-font-mono); }
 .strategy-check-list { display: grid; gap: 7px; padding: 10px; border: 1px solid #dce8e9; color: #4a7f75; background: #f1faf7; font: 8px var(--app-font-mono); }
 .copy-leader-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 13px 0 8px; }
 .copy-leader-card { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; padding: 11px; border: 1px solid #dbe5e8; border-radius: 4px; color: #4b6067; background: #fff; text-align: left; cursor: pointer; }
