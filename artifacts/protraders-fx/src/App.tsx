@@ -1064,7 +1064,7 @@ function DashboardView({ accountMode, marketQuotes, onNavigate }: { accountMode:
 
 function AnalysisToolsView({ marketQuotes }: { marketQuotes: Record<string, MarketQuote> }) {
   const [mode, setMode] = useState('Digit circles');
-  const [sideTab, setSideTab] = useState('Summary');
+  const [sideTab, setSideTab] = useState<'Summary' | 'Transactions' | 'Journal' | 'Results'>('Summary');
   const [ticksWindow, setTicksWindow] = useState('120');
   const analysisMarkets = VOLATILITY_DEFINITIONS.filter(({ label }) => label.endsWith('1s')).slice(0, 6);
 
@@ -1081,8 +1081,13 @@ function AnalysisToolsView({ marketQuotes }: { marketQuotes: Record<string, Mark
         </div>
       </div>
       <aside className="analysis-side-panel">
-        <div className="analysis-side-tabs"><button type="button" className={sideTab === 'Summary' ? 'is-active' : ''} onClick={() => setSideTab('Summary')}>Summary</button><button type="button" className={sideTab === 'Transactions' ? 'is-active' : ''} onClick={() => setSideTab('Transactions')}>Transactions</button></div>
-        <div className="analysis-side-copy">{sideTab === 'Summary' ? <><strong>Live market analysis</strong><p>Digit circles use the latest {ticksWindow} tick window. Pick a signal in the grid, then review it in Manual Trader.</p></> : <><strong>Review transactions</strong><p>No contracts have been purchased from this review-only workspace. Proposal reviews will appear here when execution is enabled.</p></>}</div>
+        <div className="analysis-side-tabs" role="tablist">{(['Summary', 'Transactions', 'Journal', 'Results'] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={sideTab === tab} className={sideTab === tab ? 'is-active' : ''} onClick={() => setSideTab(tab)}>{tab}</button>)}</div>
+        <div className="analysis-side-copy">
+          {sideTab === 'Summary' && <><strong>Live market analysis</strong><p>Digit circles use the latest {ticksWindow} tick window. Review the live signal snapshot here.</p></>}
+          {sideTab === 'Transactions' && <><strong>Transactions</strong><p>No bot transactions have been recorded in this analysis view yet.</p></>}
+          {sideTab === 'Journal' && <><strong>Journal</strong><p>Scanner and bot activity notes will appear here as results arrive.</p></>}
+          {sideTab === 'Results' && <><strong>Results</strong><p>Live digit probabilities are shown in the market cards. Select a market to inspect its latest result.</p></>}
+        </div>
         <button type="button" className="analysis-reset" onClick={() => { setMode('Digit circles'); setSideTab('Summary'); setTicksWindow('120'); }}>Reset</button>
       </aside>
     </section>
@@ -1408,7 +1413,7 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
     }
     setRunning(true);
     setProposalState('requesting');
-    setProposalMessage('Running bot on the selected Deriv market…');
+    setProposalMessage('Running bot…');
     try {
       const response = await fetch('/api/deriv/execute', {
         method: 'POST',
@@ -1432,7 +1437,7 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
       setLastTrade(payload.trade);
       setSummaryTab('Results');
       setJournalEntries((current) => [...current, `Bot run completed · contract ${payload.trade?.contractId ?? 'confirmed'} · ${selectedDefinition.name}`]);
-      setProposalMessage(`Bot completed · contract ${payload.trade.contractId ?? 'confirmed'} · buy ${payload.trade.buyPrice ?? '—'} ${payload.trade.currency ?? 'USD'}.`);
+      setProposalMessage('Results are ready.');
     } catch (error) {
       setRunning(false);
       setProposalState('error');
@@ -1496,8 +1501,8 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
           <div className="recovery-trash">▰</div>
         </div>
         <aside className="recovery-summary">
-          <div className="recovery-summary-tabs">
-            {(['Summary', 'Transactions', 'Journal', 'Results'] as const).map((tab) => <button key={tab} className={summaryTab === tab ? 'is-active' : ''} type="button" onClick={() => setSummaryTab(tab)}>{tab}</button>)}
+          <div className="recovery-summary-tabs" role="tablist">
+            {(['Summary', 'Transactions', 'Journal', 'Results'] as const).map((tab) => <button key={tab} className={summaryTab === tab ? 'is-active' : ''} type="button" role="tab" aria-selected={summaryTab === tab} onClick={() => setSummaryTab(tab)}>{tab}</button>)}
           </div>
           {summaryTab === 'Summary' && <>
             <div className="recovery-empty"><p>When you’re ready to trade, hit <strong>Run Bot</strong>.<br />You’ll be able to track your bot’s<br />performance here.</p></div>
