@@ -469,7 +469,7 @@ function Home() {
             amount,
             duration: durationTicks,
             durationUnit: 't',
-            currency: 'USD',
+            currency,
             barrier,
             mode: accountMode.toLowerCase(),
             confirm: true,
@@ -539,7 +539,7 @@ function Home() {
       </div>
 
       <main ref={terminalMainRef} id="trading-workspace-panel" className={`terminal-main ${activeTool === 'Manual Trader' ? 'manual-main' : ''}`} role="tabpanel" aria-label={`${activeTool} workspace`}>
-        {activeTool === 'Dashboard' ? <DashboardView accountMode={accountMode} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Quick Bot' ? <QuickBotView activeMarket={activeMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Bulk Trader' ? <BulkTraderView accountMode={accountMode} activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} /> : activeTool === 'Analysis Tools' ? <AnalysisToolsView marketQuotes={marketQuotes} /> : activeTool === 'Volt AI' ? <VoltAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Auto AI' ? <AutoAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Signal AI' ? <SignalAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Apex Bot' ? <ApexBotView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} /> : activeTool === 'Copy Trader' ? <CopyTraderView activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Free Bots' ? <FreeBotsView accountMode={accountMode} activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Bot Builder' ? <RecoveryBotView accountMode={accountMode} activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Premium AI Bots' ? <PremiumBotsExcludedView onNavigate={setActiveTool} /> : activeTool === 'Manual Trader' ? (
+        {activeTool === 'Dashboard' ? <DashboardView accountMode={accountMode} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Quick Bot' ? <QuickBotView activeMarket={activeMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Bulk Trader' ? <BulkTraderView accountMode={accountMode} currency={currency} activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} /> : activeTool === 'Analysis Tools' ? <AnalysisToolsView marketQuotes={marketQuotes} /> : activeTool === 'Volt AI' ? <VoltAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Auto AI' ? <AutoAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Signal AI' ? <SignalAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Apex Bot' ? <ApexBotView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} /> : activeTool === 'Copy Trader' ? <CopyTraderView activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Free Bots' ? <FreeBotsView accountMode={accountMode} activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Bot Builder' ? <RecoveryBotView accountMode={accountMode} currency={currency} activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Premium AI Bots' ? <PremiumBotsExcludedView onNavigate={setActiveTool} /> : activeTool === 'Manual Trader' ? (
         <>
         <div className="terminal-heading">
           <div>
@@ -1154,7 +1154,7 @@ function QuickBotView({ activeMarket, marketQuotes, onNavigate }: { activeMarket
   );
 }
 
-function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMode }: { activeMarket: string; setActiveMarket: (market: string) => void; marketQuotes: Record<string, MarketQuote>; accountMode: 'DEMO' | 'REAL' }) {
+function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMode, currency }: { activeMarket: string; setActiveMarket: (market: string) => void; marketQuotes: Record<string, MarketQuote>; accountMode: 'DEMO' | 'REAL'; currency: string }) {
   const activeDefinition = getMarketDefinition(activeMarket);
   const activeQuote = marketQuotes[activeDefinition.symbol];
   const [tradeType, setTradeType] = useState('Even/Odd');
@@ -1285,7 +1285,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
             amount,
             duration,
             durationUnit: 't',
-            currency: 'USD',
+            currency,
             barrier: executionResult.barrier,
             mode: accountMode.toLowerCase(),
             confirm: true,
@@ -1370,7 +1370,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   );
 }
 
-function RecoveryBotView({ accountMode, activeMarket, marketQuotes }: { accountMode: 'DEMO' | 'REAL'; activeMarket: string; marketQuotes: Record<string, MarketQuote> }) {
+function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: { accountMode: 'DEMO' | 'REAL'; currency: string; activeMarket: string; marketQuotes: Record<string, MarketQuote> }) {
   const [running, setRunning] = useState(false);
   const [proposalState, setProposalState] = useState<'idle' | 'requesting' | 'ready' | 'error'>('idle');
   const [proposalMessage, setProposalMessage] = useState('');
@@ -1410,7 +1410,7 @@ function RecoveryBotView({ accountMode, activeMarket, marketQuotes }: { accountM
           amount,
           duration: 1,
           durationUnit: 't',
-          currency: 'USD',
+          currency,
           barrier: 7,
           mode: accountMode.toLowerCase(),
           confirm: true,
