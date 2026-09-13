@@ -655,7 +655,7 @@ function Home() {
         <span className="risk-warning"><strong>▲ RISK DISCLAIMER</strong> Trading carries risk; confirm the selected account before execution.</span>
         <span className="footer-brand">PROTRADERS FX · POWERED BY DERIV</span>
       </footer>
-      <FloatingMarketAI marketQuotes={marketQuotes} draggable={activeTool === 'Manual Trader' || activeTool === 'Bulk Trader'} openBulkScanner={activeTool === 'Bulk Trader'} />
+      <FloatingMarketAI marketQuotes={marketQuotes} draggable openBulkScanner={activeTool === 'Bulk Trader'} />
     </div>
   );
 }
