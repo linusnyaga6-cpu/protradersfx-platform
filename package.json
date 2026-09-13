@@ -75,6 +75,12 @@
     "@clerk/react": "^6.14.8",
     "@clerk/themes": "^2.4.57",
     "react": "19.1.4",
-    "react-dom": "19.1.4"
+    "react-dom": "19.1.4",
+    "express": "4.21.2",
+    "helmet": "^8.1.0",
+    "express-rate-limit": "^7.5.0",
+    "cors": "^2.8.5",
+    "cookie-parser": "^1.4.7",
+    "ws": "^8.18.3"
   }
 }
