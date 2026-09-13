@@ -241,6 +241,7 @@ app.get('/health', (req, res) => res.json({ ok: true, service: 'protraders-fx', 
 app.get('/robots.txt', (req, res) => res.type('text/plain').send(CANONICAL_ROBOTS));
 app.get('/sitemap.xml', (req, res) => res.type('application/xml').send(CANONICAL_SITEMAP));
 app.get('/app-config.js', (req, res) => res.type('application/javascript').send('window.PROTRADERS_PUBLIC_APP_ID=' + JSON.stringify(DERIV_PUBLIC_APP_ID) + ';'));
+app.get('/favicon.ico', (req, res) => res.type('image/svg+xml').send(fs.readFileSync(path.join(PUBLIC_DIR, 'favicon.svg'), 'utf8')));
 app.get('/workspace', (req, res) => res.type('html').send(CANONICAL_INDEX));
 app.get('/workspace.html', (req, res) => res.type('html').send(CANONICAL_INDEX));
 for (const page of ['marketplace', 'course', 'signals', 'manual', 'builder']) app.get(`/${page}`, (req, res) => res.type('html').send(CANONICAL_INDEX));
