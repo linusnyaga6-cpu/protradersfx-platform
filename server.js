@@ -23,7 +23,8 @@ const CANONICAL_ROBOTS = [
 ].join('\n') + '\n';
 const CANONICAL_SITEMAP = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://protradersfx.com/</loc></url></urlset>\n';
 const DERIV_CLIENT_ID = process.env.DERIV_CLIENT_ID || '';
-const DERIV_PUBLIC_APP_ID = process.env.DERIV_PUBLIC_APP_ID || process.env.DERIV_APP_ID || '';
+const configuredDerivAppId = process.env.DERIV_PUBLIC_APP_ID || process.env.DERIV_APP_ID || '';
+const DERIV_PUBLIC_APP_ID = /^\d+$/.test(configuredDerivAppId) ? configuredDerivAppId : '1089';
 const DERIV_AFFILIATE_PARAM = process.env.DERIV_AFFILIATE_PARAM || 't';
 const DERIV_AFFILIATE_TOKEN = process.env.DERIV_AFFILIATE_TOKEN || '';
 const DERIV_AFFILIATE_ID = process.env.DERIV_AFFILIATE_ID || '';
