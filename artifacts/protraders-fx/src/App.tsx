@@ -457,7 +457,7 @@ function Home() {
       setReviewState('Enter a stake of at least USD 0.35.');
       return;
     }
-    setReviewState(`Executing live ${contractSide} trade…`);
+    setReviewState('Running bot…');
     void (async () => {
       try {
         const response = await fetch('/api/deriv/execute', {
@@ -477,7 +477,7 @@ function Home() {
         });
         const payload = await response.json() as { error?: string; trade?: { contractId?: string | number; buyPrice?: number; currency?: string } };
         if (!response.ok || !payload.trade) throw new Error(payload.error ?? 'Deriv did not execute the contract.');
-        setReviewState(`${contractSide} live trade opened · contract ${payload.trade.contractId ?? 'confirmed'} · buy ${payload.trade.buyPrice ?? '—'} ${payload.trade.currency ?? 'USD'}`);
+        setReviewState('Results are ready.');
       } catch (error) {
         setReviewState(error instanceof Error ? error.message : 'Unable to execute the Deriv contract.');
       }
