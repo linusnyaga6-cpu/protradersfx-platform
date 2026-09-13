@@ -264,6 +264,38 @@ app.post('/api/deriv/proposal', async (req, res) => {
       return res.status(status).json({ error: error.code || 'DERIV_PROPOSAL_FAILED', message: error.message || 'Unable to request a Deriv proposal.' });
     }
     });
+    app.post('/api/deriv/execute', async (req, res) => {
+      const session = getSession(req);
+      if (!session) return res.status(401).json({ error: 'Not authenticated' });
+      const body = req.body || {};
+      if (body.confirm !== true) return res.status(400).json({ error: 'Explicit execution confirmation is required.' });
+      const symbol = String(body.symbol || '');
+      const contractType = ['CALL', 'PUT', 'DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD'].includes(body.contractType) ? body.contractType : null;
+      const amount = Number(body.amount);
+      const duration = Number(body.duration);
+      const durationUnit = ['t', 's', 'm'].includes(body.durationUnit) ? body.durationUnit : 't';
+      const currency = /^[A-Z]{3}$/.test(String(body.currency || 'USD')) ? String(body.currency || 'USD') : 'USD';
+      const barrier = Number(body.barrier);
+      const mode = body.mode === 'real' ? 'real' : 'demo';
+      const digitContract = contractType === 'DIGITOVER' || contractType === 'DIGITUNDER';
+      const symbolValid = /^(1HZ\d+V|R_\d+|frx[A-Z]{6})$/.test(symbol);
+      if (!symbolValid || !contractType || !Number.isFinite(amount) || amount < 0.35 || amount > 10000 || !Number.isFinite(duration) || duration < 1 || duration > 365 || (digitContract && (!Number.isFinite(barrier) || barrier < 0 || barrier > 9))) return res.status(400).json({ error: 'Invalid Deriv execution parameters' });
+      try {
+        const proposalPayload = { proposal: 1, amount, basis: 'stake', contract_type: contractType, currency, duration, duration_unit: durationUnit, symbol };
+        if (digitContract) proposalPayload.barrier = barrier;
+        const result = await requestForMode(session, mode, proposalPayload);
+        const proposal = result.response?.proposal || {};
+        const price = Number(proposal.ask_price);
+        if (!proposal.id || !Number.isFinite(price)) throw new Error('Deriv did not return a purchasable proposal.');
+        const tradeResult = await openOptions(result.account.token || session.accessToken, result.account, { buy: proposal.id, price });
+        saveSession(res, session);
+        const buy = tradeResult?.buy || {};
+        return res.json({ execution: 'live', trade: { contractId: buy.contract_id || null, transactionId: buy.transaction_id || null, buyPrice: buy.buy_price ?? price, currency: proposal.currency || currency }, proposal: { id: proposal.id, askPrice: price, payout: proposal.payout || null, spot: proposal.spot || null } });
+      } catch (error) {
+        const status = error.code === 'ACCOUNT_MODE_UNAVAILABLE' ? 409 : 502;
+        return res.status(status).json({ error: error.code || 'DERIV_EXECUTION_FAILED', message: error.message || 'Unable to execute a Deriv contract.' });
+      }
+    });
     const reviewTrade = (req, res) => { const session = getSession(req); if (!session) return res.status(401).json({ error: 'Not authenticated' }); const mode = req.body?.mode === 'real' ? 'real' : 'demo'; const symbol = String(req.body?.symbol || 'R_100'); const contractType = ['CALL', 'PUT'].includes(req.body?.contract_type) ? req.body.contract_type : null; const stake = Number(req.body?.stake); const duration = Number(req.body?.duration); if (!contractType || !/^([A-Z0-9_]+|frx[A-Z]+)$/.test(symbol) || !Number.isFinite(stake) || stake <= 0 || !Number.isFinite(duration) || duration < 1 || duration > 3600) return res.status(400).json({ error: 'Invalid trade parameters' }); res.json({ ok: true, mode, symbol, contractType, stake, duration, execution: 'proposal_only', status: 'pending_review', message: 'Trade proposal created for review. No Deriv contract was purchased.' }); };
 app.post('/api/trades', reviewTrade);
 app.post('/api/trades/proposal', reviewTrade);app.post('/api/bot', async (req, res) => { const session = getSession(req); if (!session) return res.status(401).json({ error: 'Not authenticated' }); const action = req.body?.action === 'start' ? 'start' : 'stop'; res.json({ ok: true, message: action === 'start' ? 'Free bot interface started in controlled mode. Live bot execution remains disabled until the bot adapter is separately tested.' : 'Free bot stopped.', execution: 'interface_only' }); });
