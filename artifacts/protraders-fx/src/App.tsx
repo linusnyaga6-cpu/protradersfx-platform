@@ -1170,13 +1170,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   const [scannerDigits, setScannerDigits] = useState<Array<{ digit: number; percentage: number }>>([]);
   const [selectedScannerSymbol, setSelectedScannerSymbol] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scannerLog, setScannerLog] = useState<string[]>([
-    '[INFO] Authenticating AI market matrix...',
-    '[OK] Synthetic stream linked',
-    '[INFO] Reading preferred market clusters...',
-     '[INFO] Signal pressure rising',
-    '[INFO] Checking last digit sequence...',
-  ]);
+  const [scannerLog, setScannerLog] = useState<string[]>([]);
   const [executionState, setExecutionState] = useState<'idle' | 'executing'>('idle');
   useEffect(() => {
     const handleOpenScanner = () => setScannerOpen(true);
@@ -1205,7 +1199,6 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
       '[INFO] Reading preferred market clusters...',
       '[INFO] Signal pressure rising',
       '[INFO] Checking last digit sequence...',
-      '[INFO] Searching live market matrix...',
     ]);
     window.setTimeout(() => {
       const ticks = (preferredQuote?.ticks ?? []).slice(-Math.max(20, Number(numberOfTicks) || 120));
