@@ -34,7 +34,6 @@ const DATA_FILE = process.env.VERCEL ? path.join('/tmp', 'protraders-fx-analytic
 // Read frontend assets explicitly so @vercel/node includes them in the function bundle.
 const FRONTEND = { index: fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8') };
 const CANONICAL_INDEX = FRONTEND.index;
-const LEGACY_FRONTEND_APP = fs.readFileSync(path.join(PUBLIC_DIR, 'assets', 'index-BOMDWuLA.js'), 'utf8');
 
 if (!process.env.VERCEL) {
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
@@ -247,7 +246,6 @@ app.get('/workspace', (req, res) => res.type('html').send(CANONICAL_INDEX));
 app.get('/workspace.html', (req, res) => res.type('html').send(CANONICAL_INDEX));
 for (const page of ['marketplace', 'course', 'signals', 'manual', 'builder']) app.get(`/${page}`, (req, res) => res.type('html').send(CANONICAL_INDEX));
 app.get('/', (req, res) => res.type('html').send(CANONICAL_INDEX));
-app.get('/assets/index-BOMDWuLA.js', (req, res) => res.set('Cache-Control', 'no-store').type('application/javascript').send(LEGACY_FRONTEND_APP.replace(/gx\s*=\s*Pw\(\s*window\.location\.hostname\s*,\s*"[^"]*"\s*\)/g, 'gx=""').replace(/VITE_CLERK_PUBLISHABLE_KEY\s*:\s*"[^"]*"/g, 'VITE_CLERK_PUBLISHABLE_KEY:""')));
 app.use(express.static(PUBLIC_DIR, { extensions: ['html'] }));
 app.get('*', (req, res) => res.type('html').send(CANONICAL_INDEX));
 app.use((error, req, res, next) => { console.error(error); res.status(500).json({ error: 'Internal server error' }); });
