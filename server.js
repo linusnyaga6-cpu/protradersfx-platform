@@ -186,7 +186,7 @@ async function requestForMode(session, mode, payload) {
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()) : [BASE_URL];
 app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], connectSrc: ["'self'", 'https://auth.deriv.com', 'https://api.derivws.com', 'wss://*.derivws.com', 'https://*.clerk.accounts.dev', 'https://clerk-telemetry.com'], scriptSrc: ["'self'", 'https://*.clerk.accounts.dev', 'https://challenges.cloudflare.com'], frameSrc: ["'self'", 'https://*.clerk.accounts.dev', 'https://challenges.cloudflare.com'], workerSrc: ["'self'", 'blob:'], styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'], imgSrc: ["'self'", 'data:', 'https:'], frameAncestors: ["'none'"] } }, referrerPolicy: { policy: 'strict-origin-when-cross-origin' } }));
+app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'self'"], connectSrc: ["'self'", 'https://auth.deriv.com', 'https://api.derivws.com', 'wss://*.derivws.com'], scriptSrc: ["'self'"], workerSrc: ["'self'", 'blob:'], styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'], imgSrc: ["'self'", 'data:', 'https:'], frameAncestors: ["'none'"] } }, referrerPolicy: { policy: 'strict-origin-when-cross-origin' } }));
 app.disable('x-powered-by');
 app.use(express.json({ limit: '20kb' }));
 app.use(express.urlencoded({ extended: false, limit: '20kb' }));
