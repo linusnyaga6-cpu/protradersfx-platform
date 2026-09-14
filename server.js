@@ -197,51 +197,70 @@ function openOptions(accessToken, account, payload) {
     });
     }
 function openOptionsTrade(accessToken, account, proposalPayload) {
-    return new Promise(async (resolve, reject) => {
-      let settled = false;
-      let ws;
-      let timer;
-      let proposal;
-      const finish = (callback) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        try { ws.close(); } catch {}
-        callback();
-      };
-      timer = setTimeout(() => finish(() => reject(new Error('Deriv trading connection timeout'))), 15000);
-      try {
-        const otp = await optionsRequest('/accounts/' + encodeURIComponent(account.account_id) + '/otp', accessToken, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-        if (!otp?.url) { const error = new Error('Deriv did not return an OTP WebSocket URL'); error.code = 'OTP_URL_MISSING'; throw error; }
-        ws = new WebSocket(otp.url);
-        ws.on('open', () => ws.send(JSON.stringify(proposalPayload)));
-        ws.on('message', (raw) => {
-          let data; try { data = JSON.parse(raw.toString()); } catch { return; }
-          if (data.error) {
-            const error = new Error(data.error.message || 'Deriv trading error');
-            error.code = data.error.code || 'DERIV_TRADE_ERROR';
-            finish(() => reject(error));
-            return;
-          }
-          if (data.msg_type === 'proposal') {
-            proposal = data.proposal || {};
-            const price = Number(proposal.ask_price);
-            if (!proposal.id || !Number.isFinite(price)) {
-              finish(() => reject(new Error('Deriv did not return a purchasable proposal.')));
+      return new Promise(async (resolve, reject) => {
+        let settled = false;
+        let ws;
+        let timer;
+        let proposal;
+        let buy;
+        let contract;
+        const finish = (callback) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          try { ws.close(); } catch {}
+          callback();
+        };
+        timer = setTimeout(() => {
+          if (buy) finish(() => resolve({ proposal, buy, contract }));
+          else finish(() => reject(new Error('Deriv trading connection timeout')));
+        }, 15000);
+        try {
+          const otp = await optionsRequest('/accounts/' + encodeURIComponent(account.account_id) + '/otp', accessToken, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+          if (!otp?.url) { const error = new Error('Deriv did not return an OTP WebSocket URL'); error.code = 'OTP_URL_MISSING'; throw error; }
+          ws = new WebSocket(otp.url);
+          ws.on('open', () => ws.send(JSON.stringify(proposalPayload)));
+          ws.on('message', (raw) => {
+            let data; try { data = JSON.parse(raw.toString()); } catch { return; }
+            if (data.error) {
+              const error = new Error(data.error.message || 'Deriv trading error');
+              error.code = data.error.code || 'DERIV_TRADE_ERROR';
+              finish(() => reject(error));
               return;
             }
-            ws.send(JSON.stringify({ buy: proposal.id, price }));
-            return;
-          }
-          if (data.msg_type === 'buy') finish(() => resolve({ proposal, buy: data.buy || {} }));
-        });
-        ws.on('error', (error) => finish(() => reject(error)));
-        ws.on('close', () => { if (!settled) finish(() => reject(new Error('Deriv trading WebSocket closed before the proposal was purchased'))); });
-      } catch (error) {
-        finish(() => reject(error));
+            if (data.msg_type === 'proposal') {
+              proposal = data.proposal || {};
+              const price = Number(proposal.ask_price);
+              if (!proposal.id || !Number.isFinite(price)) {
+                finish(() => reject(new Error('Deriv did not return a purchasable proposal.')));
+                return;
+              }
+              ws.send(JSON.stringify({ buy: proposal.id, price }));
+              return;
+            }
+            if (data.msg_type === 'buy') {
+              buy = data.buy || {};
+              if (!buy.contract_id) {
+                finish(() => resolve({ proposal, buy, contract }));
+                return;
+              }
+              ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: buy.contract_id, subscribe: 1 }));
+              return;
+            }
+            if (data.msg_type === 'proposal_open_contract') {
+              contract = data.proposal_open_contract || {};
+              const status = String(contract.status || '').toLowerCase();
+              const finished = contract.is_sold === 1 || contract.is_expired === 1 || ['won', 'lost', 'sold', 'expired'].includes(status) || contract.exit_tick !== undefined;
+              if (finished) finish(() => resolve({ proposal, buy, contract }));
+            }
+          });
+          ws.on('error', (error) => { if (buy) finish(() => resolve({ proposal, buy, contract })); else finish(() => reject(error)); });
+          ws.on('close', () => { if (!settled) { if (buy) finish(() => resolve({ proposal, buy, contract })); else finish(() => reject(new Error('Deriv trading WebSocket closed before the proposal was purchased'))); } });
+        } catch (error) {
+          finish(() => reject(error));
+        }
+      });
       }
-    });
-    }
     function selectedAccount(session, mode) {
   const accounts = Array.isArray(session.accounts) ? session.accounts : [];
   return accounts.find((account) => mode === 'demo' ? accountIsDemo(account) : !accountIsDemo(account)) || null;
@@ -362,11 +381,14 @@ app.post('/api/deriv/proposal', async (req, res) => {
           if (!proposal.id || !Number.isFinite(price)) throw new Error('Deriv did not return a purchasable proposal.');
             saveSession(res, session);
         const buy = tradeResult?.buy || {};
-        const auditData = readData();
+          const contract = tradeResult?.contract || {};
+          const profitValue = Number(contract.profit);
+          const result = contract.status === 'won' || (Number.isFinite(profitValue) && profitValue > 0) ? 'won' : contract.status === 'lost' || (Number.isFinite(profitValue) && profitValue < 0) ? 'lost' : 'pending';
+            const auditData = readData();
         auditData.events.push({ type: 'live_trade_executed', at: new Date().toISOString(), mode, symbol, contractType, amount, duration, contractId: buy.contract_id || null });
         if (auditData.events.length > 5000) auditData.events = auditData.events.slice(-5000);
         writeData(auditData);
-        return res.json({ execution: 'live', trade: { contractId: buy.contract_id || null, transactionId: buy.transaction_id || null, buyPrice: buy.buy_price ?? price, currency: proposal.currency || currency }, proposal: { id: proposal.id, askPrice: price, payout: proposal.payout || null, spot: proposal.spot || null } });
+        return res.json({ execution: 'live', trade: { contractId: buy.contract_id || null, transactionId: buy.transaction_id || null, buyPrice: buy.buy_price ?? price, currency: proposal.currency || currency, status: contract.status || null, result, profit: Number.isFinite(profitValue) ? profitValue : null }, proposal: { id: proposal.id, askPrice: price, payout: proposal.payout || null, spot: proposal.spot || null } });
       } catch (error) {
         const status = error.code === 'ACCOUNT_MODE_UNAVAILABLE' ? 409 : 502;
         return res.status(status).json({ error: error.code || 'DERIV_EXECUTION_FAILED', message: 'Deriv ' + stage + ' failed: ' + (error.message || 'Unable to execute a Deriv contract.') });
