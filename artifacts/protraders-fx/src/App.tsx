@@ -1971,6 +1971,15 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
 }
 
 function App() {
+  useEffect(() => {
+    const robots = document.querySelector('meta[name="robots"]');
+    if (!robots) return;
+    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    const hasWorkspaceView = new URLSearchParams(window.location.search).has('view');
+    const isPrivateWorkspacePath = path !== '/' || hasWorkspaceView;
+    robots.setAttribute('content', isPrivateWorkspacePath ? 'noindex, nofollow, noarchive' : 'index, follow');
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

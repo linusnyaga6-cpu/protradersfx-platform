@@ -1,0 +1,22 @@
+{
+  "buildCommand": "PORT=3000 BASE_PATH=/ pnpm run build",
+  "outputDirectory": "dist/public",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(analysis|ai-scanner|dashboard|bot-builder|volt-ai|auto-ai|free-bots|premium-ai-bots|quick-bot|signal-ai|manual-trader|bulk-trader|apex-bot|copy-trader|analysis-tools|account|sign-in|sign-up)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    }
+  ]
+}
