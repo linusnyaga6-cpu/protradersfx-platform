@@ -1387,6 +1387,7 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
   const [summaryTab, setSummaryTab] = useState<'Summary' | 'Transactions' | 'Journal' | 'Results'>('Summary');
   const [lastTrade, setLastTrade] = useState<{ contractId?: string | number; buyPrice?: number; currency?: string } | null>(null);
   const [journalEntries, setJournalEntries] = useState<string[]>([]);
+  const [resultDialog, setResultDialog] = useState<{ title: string; message: string; isError?: boolean } | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('Trade parameters');
   const [stake, setStake] = useState('10');
   const [takeProfit, setTakeProfit] = useState('50');
@@ -1438,11 +1439,14 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
       setSummaryTab('Results');
       setJournalEntries((current) => [...current, `Bot run completed · contract ${payload.trade?.contractId ?? 'confirmed'} · ${selectedDefinition.name}`]);
       setProposalMessage('Results are ready.');
+      setResultDialog({ title: 'Results ready', message: 'Your bot result is ready. Open Results to review this run.' });
     } catch (error) {
       setRunning(false);
       setProposalState('error');
-      setJournalEntries((current) => [...current, `Bot run failed · ${error instanceof Error ? error.message : 'Unable to execute the Deriv contract.'}`]);
-      setProposalMessage(error instanceof Error ? error.message : 'Unable to execute the Deriv contract.');
+      const message = error instanceof Error ? error.message : 'Unable to execute the Deriv contract.';
+      setJournalEntries((current) => [...current, `Bot run failed · ${message}`]);
+      setProposalMessage(message);
+      setResultDialog({ title: 'Bot result unavailable', message, isError: true });
     }
   };
 
@@ -1517,6 +1521,19 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
         </aside>
       </div>
       <div className="recovery-disclaimer">▲ Risk Disclaimer <span>Live contract execution is enabled; confirm each run before purchase.</span><span>{accountMode} · Live execution</span></div>
+      {resultDialog && (
+        <div className="bot-result-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResultDialog(null); }}>
+          <section className="bot-result-dialog" role="dialog" aria-modal="true" aria-labelledby="bot-result-title" onMouseDown={(event) => event.stopPropagation()}>
+            <button type="button" className="bot-result-close" aria-label="Close result dialog" onClick={() => setResultDialog(null)}>×</button>
+            <h2 id="bot-result-title">{resultDialog.title}</h2>
+            <p className={resultDialog.isError ? 'is-error' : ''}>{resultDialog.message}</p>
+            <div className="bot-result-actions">
+              <button type="button" className="bot-result-cancel" onClick={() => setResultDialog(null)}>Cancel</button>
+              <button type="button" className="bot-result-ok" onClick={() => { setSummaryTab('Results'); setResultDialog(null); }}>OK</button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }
