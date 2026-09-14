@@ -2,6 +2,23 @@
   "buildCommand": "PORT=3000 BASE_PATH=/ pnpm run build",
   "outputDirectory": "dist/public",
   "framework": "vite",
+  "redirects": [
+    {
+      "source": "/analysis",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/ai-scanner",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/analysis-tools",
+      "destination": "/",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",
