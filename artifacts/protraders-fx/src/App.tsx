@@ -340,16 +340,13 @@ function FloatingMarketAI({ marketQuotes, draggable, openBulkScanner }: { market
             <button type="button" onClick={() => setOpen(false)} aria-label="Close Market AI">×</button>
           </div>
           <div className="market-ai-matrix-head">Digit Scanner <b>{scanState === 'complete' ? `${liveMarketCount} live markets` : 'Waiting for scan data...'}</b></div>
-          <div className="market-ai-matrix-log">
-            <span>[INFO] Authenticating AI market matrix...</span>
-            <span>[OK] Synthetic stream linked</span>
-            <span>[INFO] Reading digit clusters...</span>
-            <span>[INFO] Signal pressure rising</span>
-            <span>[INFO] Checking last digit sequence...</span>
+          <div className="market-ai-matrix-log market-ai-result-summary">
+            <span>LIVE MARKETS</span><strong>{scanState === 'complete' ? liveMarketCount : '—'}</strong>
+            <span>SETTLED P/L</span><strong>—</strong>
           </div>
           <div className={`market-ai-matrix-status ${scanState === 'scanning' ? 'is-scanning' : ''}`}>
-            <span>{scanState === 'complete' ? 'SCAN COMPLETE' : scanState === 'scanning' ? 'SCANNING' : 'STANDBY'}</span>
-            <strong>{scanState === 'complete' ? 'Market matrix ready for bulk execution.' : 'Ready to scan for last-four digit pressure.'}</strong>
+            <span>{scanState === 'complete' ? 'RESULTS READY' : scanState === 'scanning' ? 'SCANNING' : 'STANDBY'}</span>
+            <strong>{scanState === 'complete' ? 'Open Bulk Trader to view the settled profit or loss.' : 'Ready for live market results.'}</strong>
           </div>
           <button type="button" className="market-ai-scan" onClick={scanMarkets} disabled={scanState === 'scanning'}>
             <Sparkles size={14} /> {scanState === 'scanning' ? 'Scanning live markets…' : 'Scan for best market'}

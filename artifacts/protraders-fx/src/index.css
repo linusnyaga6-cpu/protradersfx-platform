@@ -1158,6 +1158,9 @@
 .market-ai-matrix-head { display: flex; align-items: center; justify-content: space-between; margin: 11px 0 7px; color: #1aef55; font: 800 9px var(--app-font-mono); text-transform: uppercase; }
 .market-ai-matrix-head b { color: #e7fff0; font-weight: 700; text-transform: none; }
 .market-ai-matrix-log { display: grid; gap: 4px; padding: 10px; border: 1px solid rgba(20, 225, 187, .68); border-radius: 4px; color: #c9ffdb; background: rgba(0, 22, 15, .76); font: 8px/1.35 var(--app-font-mono); box-shadow: inset 0 0 18px rgba(0, 235, 108, .08); }
+.market-ai-result-summary { grid-template-columns: 1fr auto; align-items: center; gap: 8px 16px; }
+.market-ai-result-summary span { color: #6fc6b1; font-size: 8px; letter-spacing: .08em; }
+.market-ai-result-summary strong { color: #eafff2; font: 900 15px var(--app-font-mono); text-align: right; }
 .market-ai-matrix-log .is-warning { color: #f5ff9d; }
 .market-ai-matrix-status { display: grid; gap: 4px; margin: 8px 0; padding: 8px 9px; border: 1px solid #17cfc8; border-radius: 4px; color: #12ef54; background: linear-gradient(90deg, rgba(0, 90, 71, .85), rgba(0, 45, 44, .78)); font: 8px var(--app-font-mono); }
 .market-ai-matrix-status strong { color: #e8fff1; font-size: 8px; }
