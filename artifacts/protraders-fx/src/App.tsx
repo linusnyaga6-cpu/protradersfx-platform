@@ -81,6 +81,23 @@ function formatSignedProfit(profit: number | null | undefined) {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
 }
 
+function TradeResultDialog({ result, onClose }: { result: BatchResult | null; onClose: () => void }) {
+  if (!result) return null;
+  return (
+    <div className="bot-result-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={`bot-result-dialog ai-batch-result ${result.profit < 0 ? 'is-loss' : 'is-win'}`} role="dialog" aria-modal="true" aria-label="Trade result">
+        <button type="button" className="bot-result-close" onClick={onClose} aria-label="Close result">×</button>
+        <span className="ai-batch-result-kicker">{result.profit < 0 ? 'LOSS' : 'PROFIT'}</span>
+        <strong className="ai-batch-result-value">{formatSignedProfit(result.profit)}</strong>
+        <div className="ai-batch-result-stats">
+          <span><small>AMOUNT</small><b>{result.amount.toFixed(2)} {result.currency}</b></span>
+          <span><small>TRANSACTIONS</small><b>{result.trades}</b></span>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 const ONE_SECOND_VOLATILITY_VALUES = [10, 15, 25, 30, 50, 75, 90, 100];
 const R_VOLATILITY_VALUES = new Set([10, 25, 50, 75, 100]);
 const VOLATILITY_DEFINITIONS: MarketDefinition[] = ONE_SECOND_VOLATILITY_VALUES.flatMap((value) => [
@@ -384,6 +401,7 @@ function Home() {
   const [stake, setStake] = useState('10');
   const [duration, setDuration] = useState('3%');
   const [reviewState, setReviewState] = useState('');
+  const [manualTradeResult, setManualTradeResult] = useState<BatchResult | null>(null);
   const [activeTool, setActiveTool] = useState(() => {
     const view = new URLSearchParams(window.location.search).get('view');
     const viewLabels: Record<string, string> = {
@@ -482,6 +500,7 @@ function Home() {
       setReviewState('Enter a stake of at least USD 0.35.');
       return;
     }
+    setManualTradeResult(null);
     setReviewState(`Executing ${action} in ${accountMode} mode…`);
     void (async () => {
       try {
@@ -503,6 +522,12 @@ function Home() {
         const payload = await response.json() as { error?: string; trade?: ExecutedTrade };
         if (!response.ok || !payload.trade) throw new Error(payload.error ?? 'Deriv did not execute the contract.');
         await refreshAccount();
+        setManualTradeResult({
+          profit: payload.trade.profit ?? 0,
+          amount: payload.trade.stake ?? payload.trade.buyPrice ?? amount,
+          trades: 1,
+          currency: payload.trade.currency ?? currency,
+        });
         setReviewState(formatSignedProfit(payload.trade.profit));
       } catch (error) {
         setReviewState(error instanceof Error ? error.message : 'Unable to execute the Deriv contract.');
@@ -679,6 +704,7 @@ function Home() {
         <span className="footer-brand">PROTRADERS FX · POWERED BY DERIV</span>
       </footer>
       <FloatingMarketAI marketQuotes={marketQuotes} draggable openBulkScanner={activeTool === 'Bulk Trader'} />
+      <TradeResultDialog result={manualTradeResult} onClose={() => setManualTradeResult(null)} />
     </div>
   );
 }
@@ -1451,17 +1477,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
           </section>
         </div>
       )}
-      {batchResult && <div className="bot-result-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setBatchResult(null); }}>
-        <section className={`bot-result-dialog ai-batch-result ${batchResult.profit < 0 ? 'is-loss' : 'is-win'}`} role="dialog" aria-modal="true" aria-label="Batch result">
-          <button type="button" className="bot-result-close" onClick={() => setBatchResult(null)} aria-label="Close result">×</button>
-          <span className="ai-batch-result-kicker">{batchResult.profit < 0 ? 'LOSS' : 'PROFIT'}</span>
-          <strong className="ai-batch-result-value">{formatSignedProfit(batchResult.profit)}</strong>
-          <div className="ai-batch-result-stats">
-            <span><small>AMOUNT</small><b>{batchResult.amount.toFixed(2)} {batchResult.currency}</b></span>
-            <span><small>TRANSACTIONS</small><b>{batchResult.trades}</b></span>
-          </div>
-        </section>
-      </div>}
+      <TradeResultDialog result={batchResult} onClose={() => setBatchResult(null)} />
     </section>
   );
 }
@@ -1474,6 +1490,7 @@ function RecoveryBotView({ accountMode, currency, balance, activeMarket, marketQ
   const [lastTrade, setLastTrade] = useState<ExecutedTrade | null>(null);
   const [transactions, setTransactions] = useState<ExecutedTrade[]>([]);
   const [journalEntries, setJournalEntries] = useState<string[]>([]);
+  const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('Trade parameters');
   const [stake, setStake] = useState('10');
   const [runCount, setRunCount] = useState('1');
@@ -1511,11 +1528,13 @@ function RecoveryBotView({ accountMode, currency, balance, activeMarket, marketQ
     const requestedRuns = Math.max(1, Math.floor(Number(runCount) || 1));
     stopRequestedRef.current = false;
     setRunning(true);
+    setBatchResult(null);
     setProposalState('requesting');
     setProposalMessage('');
     let completed = 0;
     let failed = 0;
-    let cumulativeProfit = transactions.reduce((total, trade) => total + (trade.profit ?? 0), 0);
+    const startingProfit = transactions.reduce((total, trade) => total + (trade.profit ?? 0), 0);
+    let cumulativeProfit = startingProfit;
     let stopReason = '';
     for (let runIndex = 0; runIndex < requestedRuns; runIndex += 1) {
       if (stopRequestedRef.current) {
@@ -1566,8 +1585,10 @@ function RecoveryBotView({ accountMode, currency, balance, activeMarket, marketQ
     }
     setRunning(false);
     stopRequestedRef.current = false;
+    const batchProfit = cumulativeProfit - startingProfit;
+    if (completed > 0) setBatchResult({ profit: batchProfit, amount: amount * completed, trades: completed, currency });
     setProposalState(failed ? 'error' : 'ready');
-    setProposalMessage(failed ? `${completed}/${requestedRuns} runs completed.` : stopReason || `${completed}/${requestedRuns} runs completed.`);
+    setProposalMessage(failed ? `${completed}/${requestedRuns} runs completed.` : completed > 0 ? formatSignedProfit(batchProfit) : stopReason || `${completed}/${requestedRuns} runs completed.`);
   };
   const resultCurrency = transactions.at(-1)?.currency ?? currency;
   const resultStake = transactions.reduce((total, trade) => total + (trade.stake ?? 0), 0);
@@ -1665,6 +1686,7 @@ function RecoveryBotView({ accountMode, currency, balance, activeMarket, marketQ
         </aside>
       </div>
       <div className="recovery-disclaimer">▲ Risk Disclaimer <span>Live contract execution is enabled; confirm each run before purchase.</span><span>{accountMode} · Live execution</span></div>
+      <TradeResultDialog result={batchResult} onClose={() => setBatchResult(null)} />
     </section>
   );
 }
@@ -1680,6 +1702,7 @@ function FreeBotsView({ accountMode, currency, activeMarket, marketQuotes, onTra
   const [stopLoss, setStopLoss] = useState('30');
   const [runCount, setRunCount] = useState('5');
   const [botTransactions, setBotTransactions] = useState<ExecutedTrade[]>([]);
+  const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
   const [botStatus, setBotStatus] = useState('');
   const stopRequestedRef = useRef(false);
   const selectedDefinition = getVolatilityDefinition(botMarket);
@@ -1724,6 +1747,7 @@ function FreeBotsView({ accountMode, currency, activeMarket, marketQuotes, onTra
     }
     stopRequestedRef.current = false;
     setBotRunning(true);
+    setBatchResult(null);
     setBotStatus(`Executing ${requestedRuns} Diagnosis Bot trade${requestedRuns === 1 ? '' : 's'}…`);
     let cumulativeProfit = 0;
     let completed = 0;
@@ -1774,7 +1798,8 @@ function FreeBotsView({ accountMode, currency, activeMarket, marketQuotes, onTra
     }
     setBotRunning(false);
     stopRequestedRef.current = false;
-    setBotStatus(failed ? `${completed}/${requestedRuns} settled · ${stopReason}` : stopReason || `${completed}/${requestedRuns} runs completed.`);
+    if (completed > 0) setBatchResult({ profit: cumulativeProfit, amount: amount * completed, trades: completed, currency });
+    setBotStatus(failed ? `${completed}/${requestedRuns} settled · ${stopReason}` : completed > 0 ? formatSignedProfit(cumulativeProfit) : stopReason || `${completed}/${requestedRuns} runs completed.`);
   };
 
   return (
@@ -1852,6 +1877,7 @@ function FreeBotsView({ accountMode, currency, activeMarket, marketQuotes, onTra
         <span className="vertex-run-status">{botStatus || (botRunning ? 'Diagnosis Bot is executing' : 'Diagnosis Bot is ready')}</span>
         <span className="vertex-time">{accountMode} · {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} GMT</span>
       </div>
+      <TradeResultDialog result={batchResult} onClose={() => setBatchResult(null)} />
     </section>
   );
 }
