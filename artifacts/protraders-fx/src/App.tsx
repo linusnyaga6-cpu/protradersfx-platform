@@ -477,7 +477,7 @@ function Home() {
         });
         const payload = await response.json() as { error?: string; trade?: { contractId?: string | number; buyPrice?: number; currency?: string } };
         if (!response.ok || !payload.trade) throw new Error(payload.error ?? 'Deriv did not execute the contract.');
-        setReviewState('Results are ready.');
+        setReviewState('');
       } catch (error) {
         setReviewState(error instanceof Error ? error.message : 'Unable to execute the Deriv contract.');
       }
@@ -1385,7 +1385,7 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
   const [proposalState, setProposalState] = useState<'idle' | 'requesting' | 'ready' | 'error'>('idle');
   const [proposalMessage, setProposalMessage] = useState('');
   const [summaryTab, setSummaryTab] = useState<'Summary' | 'Transactions' | 'Journal' | 'Results'>('Summary');
-  const [lastTrade, setLastTrade] = useState<{ contractId?: string | number; buyPrice?: number; currency?: string } | null>(null);
+  const [lastTrade, setLastTrade] = useState<{ contractId?: string | number; buyPrice?: number; currency?: string; result?: 'won' | 'lost' | 'pending'; status?: string | null; profit?: number | null } | null>(null);
   const [journalEntries, setJournalEntries] = useState<string[]>([]);
   const [resultDialog, setResultDialog] = useState<{ title: string; message: string; isError?: boolean } | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('Trade parameters');
@@ -1431,15 +1431,16 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
           confirm: true,
         }),
       });
-      const payload = await response.json() as { error?: string; message?: string; trade?: { contractId?: string | number; buyPrice?: number; currency?: string } };
+      const payload = await response.json() as { error?: string; message?: string; trade?: { contractId?: string | number; buyPrice?: number; currency?: string; result?: 'won' | 'lost' | 'pending'; status?: string | null; profit?: number | null } };
       if (!response.ok || !payload.trade) throw new Error(payload.message ?? payload.error ?? 'Deriv did not execute the contract.');
       setRunning(false);
       setProposalState('ready');
       setLastTrade(payload.trade);
       setSummaryTab('Results');
-      setJournalEntries((current) => [...current, `Bot run completed · contract ${payload.trade?.contractId ?? 'confirmed'} · ${selectedDefinition.name}`]);
-      setProposalMessage('Results are ready.');
-      setResultDialog({ title: 'Results ready', message: 'Your bot result is ready. Open Results to review this run.' });
+      const outcomeMessage = payload.trade.result === 'lost' ? 'Sorry!!! Stop Loss Hit' : payload.trade.result === 'won' ? 'Take Profit Hit' : 'Binarytool result pending';
+      setJournalEntries((current) => [...current, `Bot result · ${outcomeMessage} · ${selectedDefinition.name}`]);
+      setProposalMessage('');
+      setResultDialog({ title: 'Binarytool', message: outcomeMessage, isError: payload.trade.result === 'lost' });
     } catch (error) {
       setRunning(false);
       setProposalState('error');
@@ -1514,9 +1515,9 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
               {['Total stake', 'Total payout', 'No. of runs', 'Contracts lost', 'Contracts won', 'Total profit/loss'].map((label) => <div key={label}><strong>{label}</strong><span>{label.includes('profit') ? '0.00 USD' : label.includes('stake') || label.includes('payout') ? '0.00 USD' : '0'}</span></div>)}
             </div>
           </>}
-          {summaryTab === 'Transactions' && <div className="recovery-tab-content"><strong>Transactions</strong>{lastTrade ? <p>Contract {lastTrade.contractId ?? 'confirmed'}<br />Buy {lastTrade.buyPrice ?? '—'} {lastTrade.currency ?? currency}</p> : <p>No bot transactions yet.</p>}</div>}
+          {summaryTab === 'Transactions' && <div className="recovery-tab-content"><strong>Transactions</strong>{lastTrade ? <p>{lastTrade.result === 'lost' ? 'Loss' : lastTrade.result === 'won' ? 'Win' : 'Pending'}<br />Contract {lastTrade.contractId ?? 'confirmed'}<br />{lastTrade.profit !== null && lastTrade.profit !== undefined ? `P/L ${lastTrade.profit.toFixed(2)} ${lastTrade.currency ?? currency}` : 'Awaiting settlement'}</p> : <p>No bot transactions yet.</p>}</div>}
           {summaryTab === 'Journal' && <div className="recovery-tab-content"><strong>Journal</strong>{journalEntries.length ? journalEntries.slice(-5).map((entry, index) => <p key={`${entry}-${index}`}>{entry}</p>) : <p>Your bot activity journal will appear here after you run the bot.</p>}</div>}
-          {summaryTab === 'Results' && <div className="recovery-tab-content"><strong>Results</strong>{lastTrade ? <p className="recovery-result-success">Bot completed successfully<br /><b>Contract {lastTrade.contractId ?? 'confirmed'}</b><br />Buy {lastTrade.buyPrice ?? '—'} {lastTrade.currency ?? currency}</p> : <p>Run the bot to see the latest result.</p>}</div>}
+          {summaryTab === 'Results' && <div className="recovery-tab-content"><strong>Results</strong>{lastTrade ? <p className={lastTrade.result === 'lost' ? 'recovery-result-loss' : 'recovery-result-success'}><b>{lastTrade.result === 'lost' ? 'Sorry!!! Stop Loss Hit' : lastTrade.result === 'won' ? 'Take Profit Hit' : 'Binarytool result pending'}</b><br />{lastTrade.profit !== null && lastTrade.profit !== undefined ? `${lastTrade.profit.toFixed(2)} ${lastTrade.currency ?? currency}` : 'Awaiting settlement'}</p> : <p>Run the bot to see the latest result.</p>}</div>}
           <button type="button" className="recovery-reset" onClick={() => { setRunning(false); setProposalState('idle'); setProposalMessage(''); setLastTrade(null); setJournalEntries([]); setSummaryTab('Summary'); }}>Reset</button>
         </aside>
       </div>
