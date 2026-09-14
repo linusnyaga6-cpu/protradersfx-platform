@@ -56,6 +56,24 @@ type MarketQuote = {
   ticks: number[];
   lastTickAt: number | null;
 };
+type ExecutedTrade = {
+  contractId?: string | number;
+  type?: string;
+  buyPrice?: number;
+  currency?: string;
+  result?: 'won' | 'lost' | 'pending';
+  status?: string | null;
+  profit?: number | null;
+  payout?: number | null;
+  stake?: number;
+  entrySpot?: number | string | null;
+  exitSpot?: number | string | null;
+};
+
+function formatSignedProfit(profit: number | null | undefined) {
+  const value = profit ?? 0;
+  return `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
+}
 
 const ONE_SECOND_VOLATILITY_VALUES = [10, 15, 25, 30, 50, 75, 90, 100];
 const R_VOLATILITY_VALUES = new Set([10, 25, 50, 75, 100]);
@@ -353,7 +371,7 @@ function FloatingMarketAI({ marketQuotes, draggable, openBulkScanner }: { market
 }
 
 function Home() {
-  const { isLoaded, isSignedIn, activeMode, balance, currency, switchMode } = useAppAuth();
+  const { isLoaded, isSignedIn, activeMode, balance, currency, refreshAccount, switchMode } = useAppAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeMarket, setActiveMarket] = useState(DEFAULT_MARKET_LABEL);
   const [accountMode, setAccountMode] = useState<'DEMO' | 'REAL'>(activeMode === 'real' ? 'REAL' : 'DEMO');
@@ -362,7 +380,6 @@ function Home() {
   const [contractSide, setContractSide] = useState<'RISE' | 'FALL' | 'OVER' | 'UNDER' | 'ODD' | 'EVEN'>('RISE');
   const [stake, setStake] = useState('10');
   const [duration, setDuration] = useState('3%');
-  const [takeProfitEnabled, setTakeProfitEnabled] = useState(false);
   const [reviewState, setReviewState] = useState('');
   const [activeTool, setActiveTool] = useState(() => {
     const view = new URLSearchParams(window.location.search).get('view');
@@ -443,13 +460,18 @@ function Home() {
     { label: 'Analysis Tools', icon: Search },
   ];
 
-  function handleReview(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const proposalContractType = contractType === 'RISE/FALL'
-      ? direction === 'RISE' ? 'CALL' : 'PUT'
+  function executeManualTrade(action: 'BUY' | 'SELL') {
+    const oppositeSide = contractType === 'RISE/FALL'
+      ? contractSide === 'RISE' ? 'FALL' : 'RISE'
       : contractType === 'OVER/UNDER'
-        ? contractSide === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER'
-        : contractSide === 'EVEN' ? 'DIGITEVEN' : 'DIGITODD';
+        ? contractSide === 'OVER' ? 'UNDER' : 'OVER'
+        : contractSide === 'EVEN' ? 'ODD' : 'EVEN';
+    const selectedSide = action === 'BUY' ? contractSide : oppositeSide;
+    const proposalContractType = contractType === 'RISE/FALL'
+      ? selectedSide === 'RISE' ? 'CALL' : 'PUT'
+      : contractType === 'OVER/UNDER'
+        ? selectedSide === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER'
+        : selectedSide === 'EVEN' ? 'DIGITEVEN' : 'DIGITODD';
     const amount = Number(stake);
     const durationTicks = Math.max(1, Number.parseInt(duration, 10) || 1);
     const barrier = contractType === 'OVER/UNDER' ? 4 : undefined;
@@ -457,7 +479,7 @@ function Home() {
       setReviewState('Enter a stake of at least USD 0.35.');
       return;
     }
-    setReviewState('Running bot…');
+    setReviewState(`Executing ${action} in ${accountMode} mode…`);
     void (async () => {
       try {
         const response = await fetch('/api/deriv/execute', {
@@ -475,9 +497,10 @@ function Home() {
             confirm: true,
           }),
         });
-        const payload = await response.json() as { error?: string; trade?: { contractId?: string | number; buyPrice?: number; currency?: string } };
+        const payload = await response.json() as { error?: string; trade?: ExecutedTrade };
         if (!response.ok || !payload.trade) throw new Error(payload.error ?? 'Deriv did not execute the contract.');
-        setReviewState('');
+        await refreshAccount();
+        setReviewState(formatSignedProfit(payload.trade.profit));
       } catch (error) {
         setReviewState(error instanceof Error ? error.message : 'Unable to execute the Deriv contract.');
       }
@@ -539,13 +562,13 @@ function Home() {
       </div>
 
       <main ref={terminalMainRef} id="trading-workspace-panel" className={`terminal-main ${activeTool === 'Manual Trader' ? 'manual-main' : ''}`} role="tabpanel" aria-label={`${activeTool} workspace`}>
-        {activeTool === 'Dashboard' ? <DashboardView accountMode={accountMode} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Quick Bot' ? <QuickBotView activeMarket={activeMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Bulk Trader' ? <BulkTraderView accountMode={accountMode} currency={currency} activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} /> : activeTool === 'Analysis Tools' ? <AnalysisToolsView marketQuotes={marketQuotes} /> : activeTool === 'Volt AI' ? <VoltAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Auto AI' ? <AutoAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Signal AI' ? <SignalAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Apex Bot' ? <ApexBotView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} /> : activeTool === 'Copy Trader' ? <CopyTraderView activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Free Bots' ? <FreeBotsView accountMode={accountMode} activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Bot Builder' ? <RecoveryBotView accountMode={accountMode} currency={currency} activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Premium AI Bots' ? <PremiumBotsExcludedView onNavigate={setActiveTool} /> : activeTool === 'Manual Trader' ? (
+        {activeTool === 'Dashboard' ? <DashboardView accountMode={accountMode} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Quick Bot' ? <QuickBotView accountMode={accountMode} currency={currency} balance={balance} activeMarket={activeMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} onTradeSettled={refreshAccount} /> : activeTool === 'Bulk Trader' ? <BulkTraderView accountMode={accountMode} currency={currency} activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onTradeSettled={refreshAccount} /> : activeTool === 'Analysis Tools' ? <AnalysisToolsView marketQuotes={marketQuotes} /> : activeTool === 'Volt AI' ? <VoltAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Auto AI' ? <AutoAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Signal AI' ? <SignalAiView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} onNavigate={setActiveTool} /> : activeTool === 'Apex Bot' ? <ApexBotView activeMarket={activeMarket} setActiveMarket={setActiveMarket} marketQuotes={marketQuotes} /> : activeTool === 'Copy Trader' ? <CopyTraderView activeMarket={activeMarket} marketQuotes={marketQuotes} /> : activeTool === 'Free Bots' ? <FreeBotsView accountMode={accountMode} currency={currency} activeMarket={activeMarket} marketQuotes={marketQuotes} onTradeSettled={refreshAccount} /> : activeTool === 'Bot Builder' ? <RecoveryBotView accountMode={accountMode} currency={currency} balance={balance} activeMarket={activeMarket} marketQuotes={marketQuotes} onTradeSettled={refreshAccount} /> : activeTool === 'Premium AI Bots' ? <PremiumBotsExcludedView onNavigate={setActiveTool} /> : activeTool === 'Manual Trader' ? (
         <>
         <div className="terminal-heading">
           <div>
             <p className="terminal-eyebrow">MANUAL TRADER</p>
             <h1>Execute with control</h1>
-            <p>Choose a live market, select {contractType}, and send a verified Deriv proposal.</p>
+            <p>Choose a live market, select {contractType}, and trade immediately in the selected mode.</p>
           </div>
           <span className="mode-badge">{accountMode} MODE</span>
         </div>
@@ -600,7 +623,7 @@ function Home() {
             </div>
           </section>
 
-          <form className="trade-ticket" onSubmit={handleReview}>
+          <form className="trade-ticket" onSubmit={(event) => { event.preventDefault(); executeManualTrade('BUY'); }}>
             <div className="trade-ticket-header">
               <div><span className="chart-label">TRADE TICKET</span><h2>{contractType.replace('/', ' / ')}</h2></div>
               <span className="ticket-mode">{accountMode} MODE</span>
@@ -635,10 +658,12 @@ function Home() {
                  setContractSide(next);
                  if (next === 'RISE' || next === 'FALL') setDirection(next);
                }} aria-label="Toggle contract side">‹›</button></div>
-               <label className="manual-check"><input type="checkbox" checked={takeProfitEnabled} onChange={(event) => setTakeProfitEnabled(event.target.checked)} /> <span>Take profit</span><small>ⓘ</small></label>
                <div className="manual-contract-stats"><span><strong>Max. payout</strong><b>{stake ? `${(Number(stake) * 600).toFixed(2)} USD` : '—'}</b></span><span><strong>Max. ticks</strong><b>85 ticks</b></span></div>
-                <button type="submit" className="review-button manual-buy-button"><span>BUY LIVE</span><ChevronRight size={17} /></button>
-                <p className="live-execution-warning">Live execution is enabled for {accountMode} mode. Review the risk icon in the dashboard before trading.</p>
+                <div className="manual-trade-actions">
+                  <button type="submit" className="review-button manual-buy-button"><span>BUY</span><ChevronRight size={17} /></button>
+                  <button type="button" className="review-button manual-sell-button" onClick={() => executeManualTrade('SELL')}><span>SELL</span><ChevronRight size={17} /></button>
+                </div>
+                <p className="live-execution-warning">Demo mode executes immediately. Select Buy or Sell to place the trade.</p>
                {reviewState && <p className="review-state" role="status">{reviewState}</p>}
             </div>
           </form>
@@ -648,7 +673,6 @@ function Home() {
       </main>
 
       <footer className="terminal-footer">
-        <button type="button" className="risk-warning" title="Risk disclaimer: trading carries risk. Check the selected account mode before execution." aria-label="Open risk disclaimer">⚠</button>
         <span className="footer-brand">PROTRADERS FX · POWERED BY DERIV</span>
       </footer>
       <FloatingMarketAI marketQuotes={marketQuotes} draggable openBulkScanner={activeTool === 'Bulk Trader'} />
@@ -994,7 +1018,7 @@ function PublicLandingView() {
       <div className="public-landing-glow public-landing-glow-two" />
       <header className="public-landing-header">
         <a href={basePath || '/'} className="public-landing-brand"><span><BarChart3 size={18} /></span><strong>PROTRADERS <b>FX</b><small>POWERED BY DERIV</small></strong></a>
-         <div className="public-landing-actions"><a className="public-login" href={signInHref}>Join workspace</a><a className="public-signup" href={signUpHref}>Create account</a></div>
+         <div className="public-landing-actions"><a className="public-login" href={signInHref}>Join workspace</a><a className="public-signup" href={signUpHref}>Create account</a><a className="public-deriv-start" href={DERIV_REFERRAL_URL} target="_blank" rel="noopener noreferrer">Get started with Deriv</a></div>
       </header>
       <section className="public-hero public-hero-minimal">
         <div className="public-hero-copy">
@@ -1011,6 +1035,20 @@ function DashboardView({ accountMode, marketQuotes, onNavigate }: { accountMode:
   const featuredMarkets = MARKET_DEFINITIONS.filter(({ family }) => family === 'volatility').slice(0, 6);
   const liveMarketCount = Object.values(marketQuotes).filter((quote) => quote.status === 'live').length;
   const quotedMarketCount = Object.values(marketQuotes).filter((quote) => quote.price !== null).length;
+  const traderFeedback = [
+    { initials: 'LW', name: 'Leila Wanjiru', role: 'Active trader · ★★★★★', text: '“Live market data is easy to scan, so I spend less time switching between screens.”', tags: ['Live context', 'Fast decisions'] },
+    { initials: 'BO', name: 'Brian Otieno', role: 'Active trader · ★★★★★', text: '“Quotes, strategy controls, and execution history stay together in one focused workspace.”', tags: ['Focused workflow', 'Clear history'] },
+    { initials: 'NK', name: 'Nia Kamau', role: 'Active trader · ★★★★★', text: '“I can compare volatility markets quickly, then move into a trade with the context I need.”', tags: ['Market comparison', 'Quick setup'] },
+    { initials: 'KK', name: 'Kelvin Kiptoo', role: 'Active trader · ★★★★★', text: '“The layout gives me a repeatable process: review the market, set risk, and execute with intent.”', tags: ['Risk aware', 'Repeatable process'] },
+  ];
+  const [feedbackOffset, setFeedbackOffset] = useState(0);
+  useEffect(() => {
+    const rotationTimer = window.setInterval(() => {
+      setFeedbackOffset((current) => (current + 1) % traderFeedback.length);
+    }, 2000);
+    return () => window.clearInterval(rotationTimer);
+  }, [traderFeedback.length]);
+  const visibleFeedback = traderFeedback.map((_, index) => traderFeedback[(feedbackOffset + index) % traderFeedback.length]);
   const actions = [
     { label: 'Load Bot', description: 'Open your trading strategy', icon: Upload, tool: 'Free Bots', accent: 'cyan' },
     { label: 'Premium Bots', description: 'Exclusive automated strategies', icon: Crown, tool: 'Premium AI Bots', accent: 'gold' },
@@ -1050,12 +1088,15 @@ function DashboardView({ accountMode, marketQuotes, onNavigate }: { accountMode:
         })}
       </div>
       <section className="dashboard-feedback">
-        <span className="dashboard-feedback-kicker">TRADER FEEDBACK</span>
-        <div className="dashboard-feedback-grid">
-          <article><span className="feedback-avatar">JO</span><strong>James Ochieng</strong><small>Verified trader · ★★★★★</small><p>“The dashboard keeps signals and trading tools together, so I can review opportunities much faster.”</p></article>
-          <article className="is-featured"><span className="feedback-avatar">AH</span><strong>Amina Hassan</strong><small>Verified trader · ★★★★★</small><p>“The market cards are clear and focused.”</p><div className="feedback-tags"><b>Fast workflow</b><b>Clear signals</b><b>Easy to use</b></div></article>
-          <article><span className="feedback-avatar">DM</span><strong>David Mwangi</strong><small>Verified trader · ★★★★★</small><p>“Everything I use most is close by, and the live signal view is easy to understand at a glance.”</p></article>
-          <article><span className="feedback-avatar">GN</span><strong>Grace Njeri</strong><small>Verified trader · ★★★★★</small><p>“The layout gives me a simple routine: review the data, compare markets, and then make my decision.”</p></article>
+        <span className="dashboard-feedback-kicker">TRADER FEEDBACK · ROTATING EVERY 2 SECONDS</span>
+        <div className="dashboard-feedback-grid" aria-live="polite">
+          {visibleFeedback.map((feedback, index) => (
+            <article key={`${feedback.name}-${feedbackOffset}`} className={index === 1 ? 'is-featured' : ''}>
+              <span className="feedback-avatar">{feedback.initials}</span><strong>{feedback.name}</strong>
+              <small>{feedback.role}</small><p>{feedback.text}</p>
+              <div className="feedback-tags">{feedback.tags.map((tag) => <b key={tag}>{tag}</b>)}</div>
+            </article>
+          ))}
         </div>
       </section>
     </section>
@@ -1137,29 +1178,36 @@ function AnalysisStatBar({ label, value, compare, compareValue, leftColor, right
   );
 }
 
-function QuickBotView({ activeMarket, marketQuotes, onNavigate }: { activeMarket: string; marketQuotes: Record<string, MarketQuote>; onNavigate: (tool: string) => void }) {
+function QuickBotView({ accountMode, currency, balance, activeMarket, marketQuotes, onNavigate, onTradeSettled }: { accountMode: 'DEMO' | 'REAL'; currency: string; balance: number | null; activeMarket: string; marketQuotes: Record<string, MarketQuote>; onNavigate: (tool: string) => void; onTradeSettled: () => Promise<void> }) {
   const definition = getVolatilityDefinition(getMarketDefinition(activeMarket).name);
   const quote = marketQuotes[definition.symbol];
   const [loaded, setLoaded] = useState(false);
+  const [selectedBot, setSelectedBot] = useState<'diagnosis' | 'recovery'>('diagnosis');
 
   return (
-    <section className="quick-bot-view">
-      <div className="quick-bot-card">
-        <div className="quick-bot-card-top">
-          <div className="quick-bot-pin">⌑</div>
-          <div><span className="quick-bot-kicker">QUICK BOT</span><h1>Vertex Digits</h1></div>
-          <span className="quick-bot-pill">QUICK BOT</span>
-        </div>
-        <p>Extreme-digit Over/Under strategy for the {definition.name} with recovery and risk controls.</p>
-        <div className="quick-bot-market"><span>{definition.name}</span><strong>{formatMarketPrice(quote?.price ?? null, quote?.pipSize ?? 2)}</strong><small>{quote?.status === 'live' ? 'LIVE' : quote?.price !== null ? 'LAST QUOTE' : 'CONNECTING'}</small></div>
-        <button type="button" className="quick-bot-load" onClick={() => { setLoaded(true); onNavigate('Free Bots'); }}>LOAD BOT <span>⇩</span></button>
-        {loaded && <p className="quick-bot-loaded" role="status">Vertex Digits loaded into Free Bots.</p>}
+    <section className="quick-bot-workspace">
+      <div className="quick-bot-tabs" role="tablist" aria-label="Quick bots">
+        <button type="button" role="tab" aria-selected={selectedBot === 'diagnosis'} className={selectedBot === 'diagnosis' ? 'is-active' : ''} onClick={() => setSelectedBot('diagnosis')}>Diagnosis Bot</button>
+        <button type="button" role="tab" aria-selected={selectedBot === 'recovery'} className={selectedBot === 'recovery' ? 'is-active' : ''} onClick={() => setSelectedBot('recovery')}>Recovery Bot</button>
       </div>
+      {selectedBot === 'recovery' ? <RecoveryBotView accountMode={accountMode} currency={currency} balance={balance} activeMarket={activeMarket} marketQuotes={marketQuotes} onTradeSettled={onTradeSettled} /> : <section className="quick-bot-view">
+        <div className="quick-bot-card">
+          <div className="quick-bot-card-top">
+            <div className="quick-bot-pin">⌑</div>
+            <div><span className="quick-bot-kicker">DIAGNOSIS BOT</span><h1>Diagnosis Bot</h1></div>
+            <span className="quick-bot-pill">QUICK BOT</span>
+          </div>
+          <p>Run a focused digit strategy on the selected volatility market with editable stake, run count, and risk limits.</p>
+          <div className="quick-bot-market"><span>{definition.name}</span><strong>{formatMarketPrice(quote?.price ?? null, quote?.pipSize ?? 2)}</strong><small>{quote?.status === 'live' ? 'LIVE' : quote?.price !== null ? 'LAST QUOTE' : 'CONNECTING'}</small></div>
+          <button type="button" className="quick-bot-load" onClick={() => { setLoaded(true); onNavigate('Free Bots'); }}>OPEN DIAGNOSIS BOT <span>⇩</span></button>
+          {loaded && <p className="quick-bot-loaded" role="status">Diagnosis Bot opened in Free Bots.</p>}
+        </div>
+      </section>}
     </section>
   );
 }
 
-function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMode, currency }: { activeMarket: string; setActiveMarket: (market: string) => void; marketQuotes: Record<string, MarketQuote>; accountMode: 'DEMO' | 'REAL'; currency: string }) {
+function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMode, currency, onTradeSettled }: { activeMarket: string; setActiveMarket: (market: string) => void; marketQuotes: Record<string, MarketQuote>; accountMode: 'DEMO' | 'REAL'; currency: string; onTradeSettled: () => Promise<void> }) {
   const activeDefinition = getMarketDefinition(activeMarket);
   const activeQuote = marketQuotes[activeDefinition.symbol];
   const [tradeType, setTradeType] = useState('Even/Odd');
@@ -1177,6 +1225,10 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerLog, setScannerLog] = useState<string[]>([]);
   const [executionState, setExecutionState] = useState<'idle' | 'executing'>('idle');
+  const [bulkTakeProfit, setBulkTakeProfit] = useState('50');
+  const [bulkStopLoss, setBulkStopLoss] = useState('500');
+  const [bulkTransactions, setBulkTransactions] = useState<ExecutedTrade[]>([]);
+  const stopRequestedRef = useRef(false);
   useEffect(() => {
     const handleOpenScanner = () => setScannerOpen(true);
     window.addEventListener('bulk-ai-open', handleOpenScanner);
@@ -1266,21 +1318,38 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   const selectedScannerResult = scannerResults.find((result) => result.definition.symbol === selectedScannerSymbol);
   const handleExecuteAiBatch = async (scanResult?: BulkScanResult) => {
     const executionResult = scanResult ?? selectedScannerResult;
-    if (!executionResult || executionState === 'executing') return;
-    const amount = Number(stake);
-    const duration = Math.max(1, Number(ticks) || 1);
-    const count = Math.min(20, Math.max(1, Number(bulkTrades) || 1));
-    if (!Number.isFinite(amount) || amount < 0.35) {
-      setReviewState('Enter a stake of at least USD 0.35 before running the AI batch.');
+    if (executionState === 'executing') {
+      stopRequestedRef.current = true;
+      setReviewState('Stopping after the current trade settles…');
       return;
     }
+    if (!executionResult) return;
+    const amount = Number(stake);
+    const duration = Math.max(1, Number(ticks) || 1);
+    const count = Math.max(1, Math.floor(Number(bulkTrades) || 1));
+    const takeProfitLimit = Number(bulkTakeProfit);
+    const stopLossLimit = Number(bulkStopLoss);
+    if (!Number.isFinite(amount) || amount < 0.35) {
+      setReviewState(`Enter a stake of at least ${currency} 0.35 before running the AI batch.`);
+      return;
+    }
+    if (!Number.isFinite(takeProfitLimit) || takeProfitLimit < 0 || !Number.isFinite(stopLossLimit) || stopLossLimit < 0) {
+      setReviewState(`Enter valid ${currency} Take Profit and Stop Loss limits.`);
+      return;
+    }
+    stopRequestedRef.current = false;
     setExecutionState('executing');
     setReviewState(`Executing ${count} live ${executionResult.side} trade${count === 1 ? '' : 's'}…`);
     let completed = 0;
     let failed = 0;
     let firstError = '';
-    const executionResults: string[] = [];
+    let cumulativeProfit = bulkTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0);
+    let stopReason = '';
     for (let index = 0; index < count; index += 1) {
+      if (stopRequestedRef.current) {
+        stopReason = 'Bot stopped by user.';
+        break;
+      }
       try {
         const response = await fetch('/api/deriv/execute', {
           method: 'POST',
@@ -1297,12 +1366,23 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
             confirm: true,
           }),
         });
-        const payload = await response.json() as { error?: string; message?: string; trade?: { contractId?: string | number; buyPrice?: number; currency?: string } };
+        const payload = await response.json() as { error?: string; message?: string; trade?: ExecutedTrade };
         if (!response.ok || !payload.trade) throw new Error(payload.message ?? payload.error ?? 'Live trade request failed.');
         completed += 1;
-        const executionResultText = `contract ${payload.trade.contractId ?? 'confirmed'} · buy ${payload.trade.buyPrice ?? '—'} ${payload.trade.currency ?? currency}`;
-        executionResults.push(executionResultText);
+        const settledTrade = payload.trade;
+        cumulativeProfit += settledTrade.profit ?? 0;
+        setBulkTransactions((current) => [...current, settledTrade]);
+        await onTradeSettled();
+        const executionResultText = formatSignedProfit(settledTrade.profit);
         setScannerLog((current) => [...current, `[OK] ${executionResultText}`]);
+        if (takeProfitLimit > 0 && cumulativeProfit >= takeProfitLimit) {
+          stopReason = `Take Profit reached at ${cumulativeProfit.toFixed(2)} ${currency}.`;
+          break;
+        }
+        if (stopLossLimit > 0 && cumulativeProfit <= -stopLossLimit) {
+          stopReason = `Stop Loss reached at ${cumulativeProfit.toFixed(2)} ${currency}.`;
+          break;
+        }
       } catch (error) {
         failed += 1;
         firstError = error instanceof Error ? error.message : 'Live trade request failed.';
@@ -1310,10 +1390,9 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
       }
     }
     setExecutionState('idle');
-    const summary = `${completed}/${count} AI live trade${count === 1 ? '' : 's'} opened${failed ? ` · ${failed} failed` : ''}.`;
-    const resultSummary = executionResults.length ? ` ${executionResults.join(' · ')}` : '';
-    setReviewState(firstError ? `${summary} ${firstError}` : `${summary}${resultSummary}`);
-    setScannerLog((current) => [...current, firstError ? `[INFO] Execution stopped: ${firstError}` : `[OK] ${completed} live trade${completed === 1 ? '' : 's'} opened`]);
+    const summary = `${completed}/${count} AI live trade${count === 1 ? '' : 's'} settled${failed ? ` · ${failed} failed` : ''}.`;
+    setReviewState(firstError ? `${summary} ${firstError}` : `${summary}${stopReason ? ` ${stopReason}` : ''}`);
+    setScannerLog((current) => [...current, firstError ? `[INFO] Execution stopped: ${firstError}` : `[OK] ${summary}${stopReason ? ` ${stopReason}` : ''}`]);
   };
   const handleBulkReview = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1341,6 +1420,8 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
           <label><span>TICKS</span><input inputMode="numeric" value={ticks} onChange={(event) => setTicks(event.target.value)} /></label>
           <label><span>STAKE</span><input inputMode="decimal" value={stake} onChange={(event) => setStake(event.target.value)} /></label>
           <label><span>NO. OF BULK TRADES</span><input inputMode="numeric" value={bulkTrades} onChange={(event) => setBulkTrades(event.target.value)} /></label>
+          <label><span>TAKE PROFIT</span><input inputMode="decimal" value={bulkTakeProfit} onChange={(event) => setBulkTakeProfit(event.target.value)} /></label>
+          <label><span>STOP LOSS</span><input inputMode="decimal" value={bulkStopLoss} onChange={(event) => setBulkStopLoss(event.target.value)} /></label>
         </div>
         <div className="bulk-action-row">
           <button type="submit" className="bulk-even-button" onClick={() => setBulkSide('left')}><span><CircleDollarSign size={12} /> {leftChoice}</span><b>USD {stake || '0.00'}</b><small>{digitCounts.filter((_, digit) => digit % 2 === 0).reduce((total, item) => total + item.percentage, 0).toFixed(2)}%</small></button>
@@ -1359,6 +1440,8 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
             <div className="ai-scanner-inputs">
               <label><span>STAKE</span><input inputMode="decimal" value={stake} onChange={(event) => setStake(event.target.value)} /></label>
               <label><span>NO. OF BULK TRADES</span><input inputMode="numeric" value={bulkTrades} onChange={(event) => setBulkTrades(event.target.value)} /></label>
+              <label><span>TAKE PROFIT</span><input inputMode="decimal" value={bulkTakeProfit} onChange={(event) => setBulkTakeProfit(event.target.value)} /></label>
+              <label><span>STOP LOSS</span><input inputMode="decimal" value={bulkStopLoss} onChange={(event) => setBulkStopLoss(event.target.value)} /></label>
             </div>
             <div className="ai-scanner-markets"><span>PREFERRED MARKET</span><b>{scannerState === 'complete' && selectedScannerResult ? selectedScannerResult.definition.name : activeDefinition.name}</b></div>
             <div className="ai-scanner-log" aria-live="polite">
@@ -1370,9 +1453,13 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
             </div>
             {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-best"><span>DIGIT SIGNAL</span><b>{selectedScannerResult.side}</b><em>{selectedScannerResult.confidence.toFixed(1)}% confidence · {selectedScannerResult.sampleSize} ticks</em></div>}
             {scannerState === 'complete' && <div className="ai-scanner-digits" aria-label="Digit scan results">{scannerDigits.map(({ digit, percentage }) => <div key={digit} className={latestBulkDigit === String(digit) ? 'is-latest' : ''}><strong>{digit}</strong><span>{percentage.toFixed(1)}%</span></div>)}</div>}
-            {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-trade"><span>{selectedScannerResult.definition.name} · {selectedScannerResult.side} · {accountMode}</span><em>Execution started automatically</em></div>}
+            {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-trade"><span>{selectedScannerResult.definition.name} · {selectedScannerResult.side} · {accountMode}</span><em>{executionState === 'executing' ? `${bulkTransactions.length} settled · TP ${bulkTakeProfit} / SL ${bulkStopLoss}` : 'Execution history retained below'}</em></div>}
+            {bulkTransactions.length > 0 && <div className="ai-scanner-history" aria-label="Bulk bot transaction history">
+              <div><span>TRANSACTIONS</span><b>{bulkTransactions.length}</b><span>P/L</span><b className={bulkTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0) < 0 ? 'is-loss' : 'is-win'}>{formatSignedProfit(bulkTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0))}</b></div>
+              {bulkTransactions.slice().reverse().map((trade, index) => <div className="ai-scanner-history-row" key={`${trade.contractId ?? 'bulk-run'}-${index}`}><strong>{bulkTransactions.length - index}</strong><span>{(trade.stake ?? trade.buyPrice ?? 0).toFixed(2)} {trade.currency ?? currency}</span><b className={trade.profit !== undefined && trade.profit !== null && trade.profit < 0 ? 'is-loss' : 'is-win'}>{formatSignedProfit(trade.profit)}</b></div>)}
+            </div>}
             {reviewState && <div className="ai-scanner-execution-state" role="status">{reviewState}</div>}
-            <button type="button" className="ai-scanner-scan-button" onClick={scanMarkets} disabled={scannerState === 'scanning' || executionState === 'executing'}>{scannerState === 'scanning' ? 'SCANNING LIVE MARKETS...' : scannerState === 'complete' ? 'SCAN AGAIN' : 'SCAN THE MARKET'}</button>
+            <button type="button" className={`ai-scanner-scan-button ${executionState === 'executing' ? 'is-stop' : ''}`} onClick={() => executionState === 'executing' ? void handleExecuteAiBatch() : scanMarkets} disabled={scannerState === 'scanning'}>{scannerState === 'scanning' ? 'SCANNING LIVE MARKETS...' : executionState === 'executing' ? '■ STOP BOT' : scannerState === 'complete' ? 'SCAN AGAIN' : 'SCAN THE MARKET'}</button>
           </section>
         </div>
       )}
@@ -1380,21 +1467,24 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   );
 }
 
-function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: { accountMode: 'DEMO' | 'REAL'; currency: string; activeMarket: string; marketQuotes: Record<string, MarketQuote> }) {
+function RecoveryBotView({ accountMode, currency, balance, activeMarket, marketQuotes, onTradeSettled }: { accountMode: 'DEMO' | 'REAL'; currency: string; balance: number | null; activeMarket: string; marketQuotes: Record<string, MarketQuote>; onTradeSettled: () => Promise<void> }) {
   const [running, setRunning] = useState(false);
   const [proposalState, setProposalState] = useState<'idle' | 'requesting' | 'ready' | 'error'>('idle');
   const [proposalMessage, setProposalMessage] = useState('');
   const [summaryTab, setSummaryTab] = useState<'Summary' | 'Transactions' | 'Journal' | 'Results'>('Summary');
-  const [lastTrade, setLastTrade] = useState<{ contractId?: string | number; buyPrice?: number; currency?: string; result?: 'won' | 'lost' | 'pending'; status?: string | null; profit?: number | null } | null>(null);
+  const [lastTrade, setLastTrade] = useState<ExecutedTrade | null>(null);
+  const [transactions, setTransactions] = useState<ExecutedTrade[]>([]);
   const [journalEntries, setJournalEntries] = useState<string[]>([]);
-  const [resultDialog, setResultDialog] = useState<{ title: string; message: string; isError?: boolean } | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('Trade parameters');
   const [stake, setStake] = useState('10');
+  const [runCount, setRunCount] = useState('1');
   const [takeProfit, setTakeProfit] = useState('50');
+  const [stopLoss, setStopLoss] = useState('500');
   const [consecutiveLosses, setConsecutiveLosses] = useState('5');
   const [recoveryMarket, setRecoveryMarket] = useState(() => getVolatilityDefinition(getMarketDefinition(activeMarket).name).name);
   const selectedDefinition = getVolatilityDefinition(recoveryMarket);
   const selectedQuote = marketQuotes[selectedDefinition.symbol];
+  const stopRequestedRef = useRef(false);
 
   useEffect(() => {
     setRecoveryMarket(getVolatilityDefinition(getMarketDefinition(activeMarket).name).name);
@@ -1402,54 +1492,91 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
 
   const handleRun = async () => {
     if (running) {
-      setRunning(false);
-      setProposalMessage('Bot paused.');
+      stopRequestedRef.current = true;
+      setProposalMessage('Stopping after the current trade settles…');
       return;
     }
     const amount = Number(stake);
+    const takeProfitLimit = Number(takeProfit);
+    const stopLossLimit = Number(stopLoss);
     if (!Number.isFinite(amount) || amount < 0.35) {
       setProposalState('error');
-      setProposalMessage('Enter a stake of at least USD 0.35.');
+      setProposalMessage(`Enter a stake of at least ${currency} 0.35.`);
       return;
     }
+    if (!Number.isFinite(takeProfitLimit) || takeProfitLimit < 0 || !Number.isFinite(stopLossLimit) || stopLossLimit < 0) {
+      setProposalState('error');
+      setProposalMessage(`Enter valid ${currency} Take Profit and Stop Loss limits.`);
+      return;
+    }
+    const requestedRuns = Math.max(1, Math.floor(Number(runCount) || 1));
+    stopRequestedRef.current = false;
     setRunning(true);
     setProposalState('requesting');
-    setProposalMessage('Running bot…');
-    try {
-      const response = await fetch('/api/deriv/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: selectedDefinition.symbol,
-          contractType: 'DIGITOVER',
-          amount,
-          duration: 1,
-          durationUnit: 't',
-          currency,
-          barrier: 7,
-          mode: accountMode.toLowerCase(),
-          confirm: true,
-        }),
-      });
-      const payload = await response.json() as { error?: string; message?: string; trade?: { contractId?: string | number; buyPrice?: number; currency?: string; result?: 'won' | 'lost' | 'pending'; status?: string | null; profit?: number | null } };
-      if (!response.ok || !payload.trade) throw new Error(payload.message ?? payload.error ?? 'Deriv did not execute the contract.');
-      setRunning(false);
-      setProposalState('ready');
-      setLastTrade(payload.trade);
-      setSummaryTab('Results');
-      const outcomeMessage = payload.trade.result === 'lost' ? 'Sorry!!! Stop Loss Hit' : payload.trade.result === 'won' ? 'Take Profit Hit' : 'Binarytool result pending';
-      setJournalEntries((current) => [...current, `Bot result · ${outcomeMessage} · ${selectedDefinition.name}`]);
-      setProposalMessage('');
-      setResultDialog({ title: 'Binarytool', message: outcomeMessage, isError: payload.trade.result === 'lost' });
-    } catch (error) {
-      setRunning(false);
-      setProposalState('error');
-      const message = error instanceof Error ? error.message : 'Unable to execute the Deriv contract.';
-      setJournalEntries((current) => [...current, `Bot run failed · ${message}`]);
-      setProposalMessage(message);
-      setResultDialog({ title: 'Bot result unavailable', message, isError: true });
+    setProposalMessage('');
+    let completed = 0;
+    let failed = 0;
+    let cumulativeProfit = transactions.reduce((total, trade) => total + (trade.profit ?? 0), 0);
+    let stopReason = '';
+    for (let runIndex = 0; runIndex < requestedRuns; runIndex += 1) {
+      if (stopRequestedRef.current) {
+        stopReason = 'Bot stopped by user.';
+        break;
+      }
+      try {
+        const response = await fetch('/api/deriv/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol: selectedDefinition.symbol,
+            contractType: 'DIGITOVER',
+            amount,
+            duration: 1,
+            durationUnit: 't',
+            currency,
+            barrier: 7,
+            mode: accountMode.toLowerCase(),
+            confirm: true,
+          }),
+        });
+        const payload = await response.json() as { error?: string; message?: string; trade?: ExecutedTrade };
+        if (!response.ok || !payload.trade) throw new Error(payload.message ?? payload.error ?? 'Deriv did not execute the contract.');
+        completed += 1;
+        const settledTrade = payload.trade;
+        cumulativeProfit += settledTrade.profit ?? 0;
+        setLastTrade(settledTrade);
+        setTransactions((current) => [...current, settledTrade]);
+        await onTradeSettled();
+        setSummaryTab('Transactions');
+        setJournalEntries((current) => [...current, `Run ${runIndex + 1}/${requestedRuns} · ${settledTrade.profit?.toFixed(2) ?? '0.00'} ${settledTrade.currency ?? currency} · ${selectedDefinition.name}`]);
+        if (takeProfitLimit > 0 && cumulativeProfit >= takeProfitLimit) {
+          stopReason = `Take Profit reached at ${cumulativeProfit.toFixed(2)} ${currency}.`;
+          break;
+        }
+        if (stopLossLimit > 0 && cumulativeProfit <= -stopLossLimit) {
+          stopReason = `Stop Loss reached at ${cumulativeProfit.toFixed(2)} ${currency}.`;
+          break;
+        }
+      } catch (error) {
+        failed += 1;
+        const message = error instanceof Error ? error.message : 'Unable to execute the Deriv contract.';
+        setJournalEntries((current) => [...current, `Run ${runIndex + 1}/${requestedRuns} failed · ${message}`]);
+        stopReason = `Execution stopped: ${message}`;
+        break;
+      }
     }
+    setRunning(false);
+    stopRequestedRef.current = false;
+    setProposalState(failed ? 'error' : 'ready');
+    setProposalMessage(failed ? `${completed}/${requestedRuns} runs completed.` : stopReason || `${completed}/${requestedRuns} runs completed.`);
   };
+  const resultCurrency = transactions.at(-1)?.currency ?? currency;
+  const resultStake = transactions.reduce((total, trade) => total + (trade.stake ?? 0), 0);
+  const resultProfit = transactions.reduce((total, trade) => total + (trade.profit ?? 0), 0);
+  const resultPayout = transactions.reduce((total, trade) => total + (trade.payout ?? Math.max(0, (trade.stake ?? 0) + (trade.profit ?? 0))), 0);
+  const resultRuns = transactions.length;
+  const resultLost = transactions.filter((trade) => trade.result === 'lost').length;
+  const resultWon = transactions.filter((trade) => trade.result === 'won').length;
 
   return (
     <section className="recovery-builder">
@@ -1462,7 +1589,7 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
         <span className="recovery-spacer" />
         <span className="recovery-live-quote"><i /> {selectedDefinition.name} {formatMarketPrice(selectedQuote?.price ?? null, selectedQuote?.pipSize ?? 2)}</span>
         <span className="recovery-currency">USD⌄</span>
-        <strong className="recovery-balance">◉ 7,221.87 USD</strong>
+        <strong className="recovery-balance">◉ {balance === null ? '—' : `${currency} ${balance.toFixed(2)}`}</strong>
         <span className="recovery-demo">{accountMode}</span>
         <button type="button" className="transfer-button">Transfer</button>
       </div>
@@ -1470,7 +1597,7 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
         {['▦ Dashboard', '◉ Best Bots', '♙ Bot Builder', '⌁ AI Analysis', '⌁ Analysis', '⟳ Auto Trades', '⌁ Trading View'].map((item) => (
           <button key={item} type="button" className={item.includes('Bot Builder') ? 'is-active' : ''} onClick={() => setSelectedBlock(item.includes('Bot Builder') ? 'Trade parameters' : selectedBlock)}>{item}</button>
         ))}
-        <button type="button" className="recovery-run-top" onClick={handleRun} disabled={proposalState === 'requesting'}>{proposalState === 'requesting' ? '… Running bot' : running ? 'Ⅱ Pause' : '▶ Run Bot'}</button>
+        <button type="button" className={`recovery-run-top ${running ? 'is-stop' : ''}`} onClick={handleRun}>{running ? '■ Stop Bot' : '▶ Run Bot'}</button>
         <span className={`recovery-running-status ${proposalState === 'error' ? 'is-error' : proposalState === 'ready' ? 'is-ready' : ''}`}>{proposalMessage || (running ? 'Bot is running' : 'Bot is not running')}</span>
       </div>
       <div className="recovery-tools">
@@ -1501,7 +1628,9 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
             <div className="recovery-set-row"><span>set</span><VertexSelect value="Stake" /><span>to</span><VertexInput value={stake} onChange={setStake} /></div>
             <div className="recovery-set-row"><span>set</span><VertexSelect value="Martingale" /><span>to</span><VertexInput value="2" /></div>
             <div className="recovery-set-row"><span>set</span><VertexSelect value="Take Profit" /><span>to</span><VertexInput value={takeProfit} onChange={setTakeProfit} /></div>
+            <div className="recovery-set-row"><span>set</span><VertexSelect value="Stop Loss" /><span>to</span><VertexInput value={stopLoss} onChange={setStopLoss} /></div>
             <div className="recovery-set-row"><span>set</span><VertexSelect value="Consecutive Losses" /><span>to</span><VertexInput value={consecutiveLosses} onChange={setConsecutiveLosses} /></div>
+            <div className="recovery-set-row"><span>set</span><VertexSelect value="Runs" /><span>to</span><VertexInput value={runCount} onChange={setRunCount} /></div>
           </div>
           <div className="recovery-trash">▰</div>
         </div>
@@ -1511,35 +1640,37 @@ function RecoveryBotView({ accountMode, currency, activeMarket, marketQuotes }: 
           </div>
           {summaryTab === 'Summary' && <>
             <div className="recovery-empty"><p>When you’re ready to trade, hit <strong>Run Bot</strong>.<br />You’ll be able to track your bot’s<br />performance here.</p></div>
-            <div className="recovery-metrics">
-              {['Total stake', 'Total payout', 'No. of runs', 'Contracts lost', 'Contracts won', 'Total profit/loss'].map((label) => <div key={label}><strong>{label}</strong><span>{label.includes('profit') ? '0.00 USD' : label.includes('stake') || label.includes('payout') ? '0.00 USD' : '0'}</span></div>)}
-            </div>
           </>}
-          {summaryTab === 'Transactions' && <div className="recovery-tab-content"><strong>Transactions</strong>{lastTrade ? <p>{lastTrade.result === 'lost' ? 'Loss' : lastTrade.result === 'won' ? 'Win' : 'Pending'}<br />Contract {lastTrade.contractId ?? 'confirmed'}<br />{lastTrade.profit !== null && lastTrade.profit !== undefined ? `P/L ${lastTrade.profit.toFixed(2)} ${lastTrade.currency ?? currency}` : 'Awaiting settlement'}</p> : <p>No bot transactions yet.</p>}</div>}
+          {summaryTab === 'Transactions' && <div className="recovery-transactions">
+            <div className="recovery-transaction-head"><span>TRANSACTION</span><span>AMOUNT</span><span>P/L</span></div>
+            {transactions.length ? transactions.slice().reverse().map((trade, index) => <div className="recovery-transaction-row" key={`${trade.contractId ?? 'run'}-${index}`}>
+              <strong>#{transactions.length - index}</strong>
+              <span>{(trade.stake ?? trade.buyPrice ?? 0).toFixed(2)} {trade.currency ?? resultCurrency}</span>
+              <em className={trade.profit !== undefined && trade.profit !== null && trade.profit < 0 ? 'is-loss' : 'is-win'}>{formatSignedProfit(trade.profit)}</em>
+            </div>) : <div className="recovery-transaction-empty">No bot transactions yet.</div>}
+            <a className="recovery-whats-this" href="#recovery-transactions-help">What's this?</a>
+          </div>}
           {summaryTab === 'Journal' && <div className="recovery-tab-content"><strong>Journal</strong>{journalEntries.length ? journalEntries.slice(-5).map((entry, index) => <p key={`${entry}-${index}`}>{entry}</p>) : <p>Your bot activity journal will appear here after you run the bot.</p>}</div>}
-          {summaryTab === 'Results' && <div className="recovery-tab-content"><strong>Results</strong>{lastTrade ? <p className={lastTrade.result === 'lost' ? 'recovery-result-loss' : 'recovery-result-success'}><b>{lastTrade.result === 'lost' ? 'Sorry!!! Stop Loss Hit' : lastTrade.result === 'won' ? 'Take Profit Hit' : 'Binarytool result pending'}</b><br />{lastTrade.profit !== null && lastTrade.profit !== undefined ? `${lastTrade.profit.toFixed(2)} ${lastTrade.currency ?? currency}` : 'Awaiting settlement'}</p> : <p>Run the bot to see the latest result.</p>}</div>}
-          <button type="button" className="recovery-reset" onClick={() => { setRunning(false); setProposalState('idle'); setProposalMessage(''); setLastTrade(null); setJournalEntries([]); setSummaryTab('Summary'); }}>Reset</button>
+          {summaryTab === 'Results' && <div className="recovery-tab-content"><strong>Results</strong><div className="recovery-figure-results"><b>{resultProfit.toFixed(2)} {resultCurrency}</b><span>{resultPayout.toFixed(2)} {resultCurrency}</span><span>{resultRuns}</span><span>{resultWon}</span><span>{resultLost}</span></div></div>}
+          {summaryTab !== 'Journal' && <div className="recovery-metrics">
+            {[
+              ['Total stake', `${resultStake.toFixed(2)} ${resultCurrency}`],
+              ['Total payout', `${resultPayout.toFixed(2)} ${resultCurrency}`],
+              ['No. of runs', String(resultRuns)],
+              ['Contracts lost', String(resultLost)],
+              ['Contracts won', String(resultWon)],
+              ['Total profit/loss', `${resultProfit.toFixed(2)} ${resultCurrency}`],
+            ].map(([label, value]) => <div key={label}><strong>{label}</strong><span className={label === 'Total profit/loss' && resultProfit < 0 ? 'is-loss' : ''}>{value}</span></div>)}
+          </div>}
+          <button type="button" className="recovery-reset" onClick={() => { stopRequestedRef.current = true; setRunning(false); setProposalState('idle'); setProposalMessage(''); setLastTrade(null); setTransactions([]); setJournalEntries([]); setSummaryTab('Summary'); setRunCount('1'); setTakeProfit('50'); setStopLoss('500'); }}>Reset</button>
         </aside>
       </div>
       <div className="recovery-disclaimer">▲ Risk Disclaimer <span>Live contract execution is enabled; confirm each run before purchase.</span><span>{accountMode} · Live execution</span></div>
-      {resultDialog && (
-        <div className="bot-result-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResultDialog(null); }}>
-          <section className="bot-result-dialog" role="dialog" aria-modal="true" aria-labelledby="bot-result-title" onMouseDown={(event) => event.stopPropagation()}>
-            <button type="button" className="bot-result-close" aria-label="Close result dialog" onClick={() => setResultDialog(null)}>×</button>
-            <h2 id="bot-result-title">{resultDialog.title}</h2>
-            <p className={resultDialog.isError ? 'is-error' : ''}>{resultDialog.message}</p>
-            <div className="bot-result-actions">
-              <button type="button" className="bot-result-cancel" onClick={() => setResultDialog(null)}>Cancel</button>
-              <button type="button" className="bot-result-ok" onClick={() => { setSummaryTab('Results'); setResultDialog(null); }}>OK</button>
-            </div>
-          </section>
-        </div>
-      )}
     </section>
   );
 }
 
-function FreeBotsView({ accountMode, activeMarket, marketQuotes }: { accountMode: 'DEMO' | 'REAL'; activeMarket: string; marketQuotes: Record<string, MarketQuote> }) {
+function FreeBotsView({ accountMode, currency, activeMarket, marketQuotes, onTradeSettled }: { accountMode: 'DEMO' | 'REAL'; currency: string; activeMarket: string; marketQuotes: Record<string, MarketQuote>; onTradeSettled: () => Promise<void> }) {
   const [botRunning, setBotRunning] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(true);
   const [initialAnalysis, setInitialAnalysis] = useState(true);
@@ -1548,6 +1679,10 @@ function FreeBotsView({ accountMode, activeMarket, marketQuotes }: { accountMode
   const [botStake, setBotStake] = useState('1');
   const [takeProfit, setTakeProfit] = useState('10');
   const [stopLoss, setStopLoss] = useState('30');
+  const [runCount, setRunCount] = useState('5');
+  const [botTransactions, setBotTransactions] = useState<ExecutedTrade[]>([]);
+  const [botStatus, setBotStatus] = useState('');
+  const stopRequestedRef = useRef(false);
   const selectedDefinition = getVolatilityDefinition(botMarket);
   const selectedQuote = marketQuotes[selectedDefinition.symbol];
 
@@ -1556,6 +1691,7 @@ function FreeBotsView({ accountMode, activeMarket, marketQuotes }: { accountMode
   }, [activeMarket]);
 
   const resetBot = () => {
+    stopRequestedRef.current = true;
     setBotRunning(false);
     setRecoveryMode(true);
     setInitialAnalysis(true);
@@ -1564,6 +1700,82 @@ function FreeBotsView({ accountMode, activeMarket, marketQuotes }: { accountMode
     setBotStake('1');
     setTakeProfit('10');
     setStopLoss('30');
+    setRunCount('5');
+    setBotTransactions([]);
+    setBotStatus('');
+  };
+
+  const runDiagnosisBot = async () => {
+    if (botRunning) {
+      stopRequestedRef.current = true;
+      setBotStatus('Stopping after the current trade settles…');
+      return;
+    }
+    const amount = Number(botStake);
+    const requestedRuns = Math.max(1, Math.floor(Number(runCount) || 1));
+    const takeProfitLimit = Number(takeProfit);
+    const stopLossLimit = Number(stopLoss);
+    if (!Number.isFinite(amount) || amount < 0.35) {
+      setBotStatus(`Enter a stake of at least ${currency} 0.35.`);
+      return;
+    }
+    if (!Number.isFinite(takeProfitLimit) || takeProfitLimit < 0 || !Number.isFinite(stopLossLimit) || stopLossLimit < 0) {
+      setBotStatus(`Enter valid ${currency} Take Profit and Stop Loss limits.`);
+      return;
+    }
+    stopRequestedRef.current = false;
+    setBotRunning(true);
+    setBotStatus(`Executing ${requestedRuns} Diagnosis Bot trade${requestedRuns === 1 ? '' : 's'}…`);
+    let cumulativeProfit = 0;
+    let completed = 0;
+    let failed = 0;
+    let stopReason = '';
+    for (let runIndex = 0; runIndex < requestedRuns; runIndex += 1) {
+      if (stopRequestedRef.current) {
+        stopReason = 'Bot stopped by user.';
+        break;
+      }
+      try {
+        const response = await fetch('/api/deriv/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol: selectedDefinition.symbol,
+            contractType: 'DIGITOVER',
+            amount,
+            duration: 1,
+            durationUnit: 't',
+            currency,
+            barrier: 7,
+            mode: accountMode.toLowerCase(),
+            confirm: true,
+          }),
+        });
+        const payload = await response.json() as { error?: string; message?: string; trade?: ExecutedTrade };
+        if (!response.ok || !payload.trade) throw new Error(payload.message ?? payload.error ?? 'Diagnosis Bot trade failed.');
+        const settledTrade = payload.trade;
+        completed += 1;
+        cumulativeProfit += settledTrade.profit ?? 0;
+        setBotTransactions((current) => [...current, settledTrade]);
+        await onTradeSettled();
+        setBotStatus(`${completed}/${requestedRuns} settled · ${cumulativeProfit.toFixed(2)} ${settledTrade.currency ?? currency}`);
+        if (takeProfitLimit > 0 && cumulativeProfit >= takeProfitLimit) {
+          stopReason = `Take Profit reached at ${cumulativeProfit.toFixed(2)} ${currency}.`;
+          break;
+        }
+        if (stopLossLimit > 0 && cumulativeProfit <= -stopLossLimit) {
+          stopReason = `Stop Loss reached at ${cumulativeProfit.toFixed(2)} ${currency}.`;
+          break;
+        }
+      } catch (error) {
+        failed += 1;
+        stopReason = error instanceof Error ? error.message : 'Diagnosis Bot trade failed.';
+        break;
+      }
+    }
+    setBotRunning(false);
+    stopRequestedRef.current = false;
+    setBotStatus(failed ? `${completed}/${requestedRuns} settled · ${stopReason}` : stopReason || `${completed}/${requestedRuns} runs completed.`);
   };
 
   return (
@@ -1575,6 +1787,7 @@ function FreeBotsView({ accountMode, activeMarket, marketQuotes }: { accountMode
           <button type="button" onClick={resetBot}>↻ <span>Reset bot</span></button>
           <button type="button" onClick={resetBot}>⌗ <span>Reset layout</span></button>
         </div>
+        <strong className="diagnosis-bot-name">DIAGNOSIS BOT</strong>
         <div className="vertex-market-chip">{selectedDefinition.name}<strong>{formatMarketPrice(selectedQuote?.price ?? null, selectedQuote?.pipSize ?? 2)}</strong></div>
       </div>
 
@@ -1606,6 +1819,7 @@ function FreeBotsView({ accountMode, activeMarket, marketQuotes }: { accountMode
             <div className="vertex-form-row"><span>Stake:</span><VertexInput value={botStake} onChange={setBotStake} /><small>USD</small></div>
             <div className="vertex-form-row"><span>Take profit:</span><VertexInput value={takeProfit} onChange={setTakeProfit} /><small>USD</small></div>
             <div className="vertex-form-row"><span>Stop loss:</span><VertexInput value={stopLoss} onChange={setStopLoss} /><small>USD</small></div>
+            <div className="vertex-form-row"><span>Runs:</span><VertexInput value={runCount} onChange={setRunCount} /></div>
             <div className="vertex-form-row"><span>Martingale:</span><VertexToggle checked={recoveryMode} onChange={() => setRecoveryMode(!recoveryMode)} /><VertexInput value="2" /><small>×</small></div>
             <div className="vertex-form-row"><span>Duration:</span><VertexSelect value="Ticks" /><VertexInput value="1" /></div>
           </VertexPanel>
@@ -1624,12 +1838,20 @@ function FreeBotsView({ accountMode, activeMarket, marketQuotes }: { accountMode
         </div>
       </div>
 
+      {botTransactions.length > 0 && <section className="diagnosis-history" aria-label="Diagnosis Bot transaction history">
+        <header><strong>TRANSACTIONS</strong><span>{formatSignedProfit(botTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0))}</span></header>
+        {botTransactions.slice().reverse().map((trade, index) => <div className="diagnosis-history-row" key={`${trade.contractId ?? 'diagnosis-run'}-${index}`}>
+          <strong>#{botTransactions.length - index}</strong>
+          <span>{(trade.stake ?? trade.buyPrice ?? 0).toFixed(2)} {trade.currency ?? currency}</span>
+          <b className={trade.profit !== undefined && trade.profit !== null && trade.profit < 0 ? 'is-loss' : 'is-win'}>{formatSignedProfit(trade.profit)}</b>
+        </div>)}
+      </section>}
+
       <div className="vertex-bottom-bar">
-        <span className="vertex-risk">▲ Risk Disclaimer</span>
-        <button type="button" className={`vertex-run ${botRunning ? 'is-running' : ''}`} onClick={() => setBotRunning(!botRunning)}>{botRunning ? 'Ⅱ  Pause' : '▶  Run'}</button>
-        <span className="vertex-run-status">{botRunning ? 'Bot is running in review mode' : 'Bot is not running'}</span>
+        <span className="vertex-bot-label">DIAGNOSIS BOT</span>
+        <button type="button" className={`vertex-run ${botRunning ? 'is-running' : ''}`} onClick={runDiagnosisBot}>{botRunning ? '■  Stop Bot' : '▶  Run Bot'}</button>
+        <span className="vertex-run-status">{botStatus || (botRunning ? 'Diagnosis Bot is executing' : 'Diagnosis Bot is ready')}</span>
         <span className="vertex-time">{accountMode} · {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} GMT</span>
-        <span className="vertex-disclaimer">No live trade is placed from this preview.</span>
       </div>
     </section>
   );
