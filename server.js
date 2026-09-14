@@ -388,7 +388,7 @@ app.post('/api/deriv/proposal', async (req, res) => {
         auditData.events.push({ type: 'live_trade_executed', at: new Date().toISOString(), mode, symbol, contractType, amount, duration, contractId: buy.contract_id || null });
         if (auditData.events.length > 5000) auditData.events = auditData.events.slice(-5000);
         writeData(auditData);
-        return res.json({ execution: 'live', trade: { contractId: buy.contract_id || null, transactionId: buy.transaction_id || null, buyPrice: buy.buy_price ?? price, currency: proposal.currency || currency, status: contract.status || null, result, profit: Number.isFinite(profitValue) ? profitValue : null }, proposal: { id: proposal.id, askPrice: price, payout: proposal.payout || null, spot: proposal.spot || null } });
+        return res.json({ execution: 'live', trade: { contractId: buy.contract_id || null, transactionId: buy.transaction_id || null, buyPrice: buy.buy_price ?? price, currency: proposal.currency || currency, status: contract.status || null, result, profit: Number.isFinite(profitValue) ? profitValue : null, type: contractType, stake: amount, payout: Number.isFinite(Number(contract.payout)) ? Number(contract.payout) : null, entrySpot: contract.entry_tick ?? contract.entry_spot ?? null, exitSpot: contract.exit_tick ?? contract.exit_spot ?? null }, proposal: { id: proposal.id, askPrice: price, payout: proposal.payout || null, spot: proposal.spot || null } });
       } catch (error) {
         const status = error.code === 'ACCOUNT_MODE_UNAVAILABLE' ? 409 : 502;
         return res.status(status).json({ error: error.code || 'DERIV_EXECUTION_FAILED', message: 'Deriv ' + stage + ' failed: ' + (error.message || 'Unable to execute a Deriv contract.') });
