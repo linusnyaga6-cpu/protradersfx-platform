@@ -69,6 +69,12 @@ type ExecutedTrade = {
   entrySpot?: number | string | null;
   exitSpot?: number | string | null;
 };
+type BatchResult = {
+  profit: number;
+  amount: number;
+  trades: number;
+  currency: string;
+};
 
 function formatSignedProfit(profit: number | null | undefined) {
   const value = profit ?? 0;
@@ -1223,11 +1229,11 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
   const [scannerDigits, setScannerDigits] = useState<Array<{ digit: number; percentage: number }>>([]);
   const [selectedScannerSymbol, setSelectedScannerSymbol] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scannerLog, setScannerLog] = useState<string[]>([]);
   const [executionState, setExecutionState] = useState<'idle' | 'executing'>('idle');
   const [bulkTakeProfit, setBulkTakeProfit] = useState('50');
   const [bulkStopLoss, setBulkStopLoss] = useState('500');
   const [bulkTransactions, setBulkTransactions] = useState<ExecutedTrade[]>([]);
+  const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
   const stopRequestedRef = useRef(false);
   useEffect(() => {
     const handleOpenScanner = () => setScannerOpen(true);
@@ -1250,13 +1256,7 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     const preferredQuote = marketQuotes[preferredDefinition.symbol];
     setScannerState('scanning');
     setScannerOpen(true);
-    setScannerLog([
-      '[INFO] Authenticating AI market matrix...',
-      '[OK] Synthetic stream linked',
-      '[INFO] Reading preferred market clusters...',
-      '[INFO] Signal pressure rising',
-      '[INFO] Checking last digit sequence...',
-    ]);
+    setBatchResult(null);
     window.setTimeout(() => {
       const ticks = (preferredQuote?.ticks ?? []).slice(-Math.max(20, Number(numberOfTicks) || 120));
       const counts = Array.from({ length: 10 }, () => 0);
@@ -1270,7 +1270,6 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
         setScannerResults([]);
         setSelectedScannerSymbol('');
         setScannerState('complete');
-        setScannerLog((current) => [...current, '[INFO] Waiting for enough live ticks on the preferred market...']);
         return;
       }
       const first = ticks[0];
@@ -1306,11 +1305,6 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
       setScannerResults([result]);
       setSelectedScannerSymbol(preferredDefinition.symbol);
       setScannerState('complete');
-      setScannerLog((current) => [
-        ...current,
-        `[OK] ${ticks.length} digits analyzed on ${preferredDefinition.name}`,
-        `[OK] Signal: ${result.side} · ${result.confidence.toFixed(1)}% confidence`,
-      ]);
        window.setTimeout(() => { void handleExecuteAiBatch(result); }, 50);
      }, 180);
   };
@@ -1339,11 +1333,13 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
     }
     stopRequestedRef.current = false;
     setExecutionState('executing');
-    setReviewState(`Executing ${count} live ${executionResult.side} trade${count === 1 ? '' : 's'}…`);
+    setBatchResult(null);
+    setReviewState('');
     let completed = 0;
     let failed = 0;
     let firstError = '';
-    let cumulativeProfit = bulkTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0);
+    const startingProfit = bulkTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0);
+    let cumulativeProfit = startingProfit;
     let stopReason = '';
     for (let index = 0; index < count; index += 1) {
       if (stopRequestedRef.current) {
@@ -1373,8 +1369,6 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
         cumulativeProfit += settledTrade.profit ?? 0;
         setBulkTransactions((current) => [...current, settledTrade]);
         await onTradeSettled();
-        const executionResultText = formatSignedProfit(settledTrade.profit);
-        setScannerLog((current) => [...current, `[OK] ${executionResultText}`]);
         if (takeProfitLimit > 0 && cumulativeProfit >= takeProfitLimit) {
           stopReason = `Take Profit reached at ${cumulativeProfit.toFixed(2)} ${currency}.`;
           break;
@@ -1390,9 +1384,9 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
       }
     }
     setExecutionState('idle');
-    const summary = `${completed}/${count} AI live trade${count === 1 ? '' : 's'} settled${failed ? ` · ${failed} failed` : ''}.`;
-    setReviewState(firstError ? `${summary} ${firstError}` : `${summary}${stopReason ? ` ${stopReason}` : ''}`);
-    setScannerLog((current) => [...current, firstError ? `[INFO] Execution stopped: ${firstError}` : `[OK] ${summary}${stopReason ? ` ${stopReason}` : ''}`]);
+    const batchProfit = cumulativeProfit - startingProfit;
+    if (completed > 0) setBatchResult({ profit: batchProfit, amount: amount * completed, trades: completed, currency });
+    setReviewState(firstError ? firstError : formatSignedProfit(batchProfit));
   };
   const handleBulkReview = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1444,16 +1438,13 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
               <label><span>STOP LOSS</span><input inputMode="decimal" value={bulkStopLoss} onChange={(event) => setBulkStopLoss(event.target.value)} /></label>
             </div>
             <div className="ai-scanner-markets"><span>PREFERRED MARKET</span><b>{scannerState === 'complete' && selectedScannerResult ? selectedScannerResult.definition.name : activeDefinition.name}</b></div>
-            <div className="ai-scanner-log" aria-live="polite">
-              {scannerLog.map((line, index) => <div key={`${line}-${index}`} className={line.includes('[WARNING]') ? 'is-warning' : line.includes('[OK]') ? 'is-ok' : ''}>{line}</div>)}
-            </div>
             <div className={`ai-scanner-status ${scannerState === 'scanning' ? 'is-scanning' : ''}`}>
               <div><span>{scannerState === 'complete' ? 'SCAN COMPLETE' : scannerState === 'scanning' ? 'SCANNING' : 'STANDBY'}</span><strong>{scannerState === 'complete' && selectedScannerResult ? `${selectedScannerResult.definition.name} · ${selectedScannerResult.side}` : scannerState === 'scanning' ? 'Reading live market pressure...' : 'Ready to scan for last-four digit pressure.'}</strong></div>
               <div className="ai-orb"><Sparkles size={17} /><b>AI</b></div>
             </div>
             {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-best"><span>DIGIT SIGNAL</span><b>{selectedScannerResult.side}</b><em>{selectedScannerResult.confidence.toFixed(1)}% confidence · {selectedScannerResult.sampleSize} ticks</em></div>}
             {scannerState === 'complete' && <div className="ai-scanner-digits" aria-label="Digit scan results">{scannerDigits.map(({ digit, percentage }) => <div key={digit} className={latestBulkDigit === String(digit) ? 'is-latest' : ''}><strong>{digit}</strong><span>{percentage.toFixed(1)}%</span></div>)}</div>}
-            {scannerState === 'complete' && selectedScannerResult && <div className="ai-scanner-trade"><span>{selectedScannerResult.definition.name} · {selectedScannerResult.side} · {accountMode}</span><em>{executionState === 'executing' ? `${bulkTransactions.length} settled · TP ${bulkTakeProfit} / SL ${bulkStopLoss}` : 'Execution history retained below'}</em></div>}
+            {bulkTransactions.length > 0 && <div className="ai-scanner-trade"><span>{bulkTransactions.length}</span><em className={bulkTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0) < 0 ? 'is-loss' : 'is-win'}>{formatSignedProfit(bulkTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0))}</em></div>}
             {bulkTransactions.length > 0 && <div className="ai-scanner-history" aria-label="Bulk bot transaction history">
               <div><span>TRANSACTIONS</span><b>{bulkTransactions.length}</b><span>P/L</span><b className={bulkTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0) < 0 ? 'is-loss' : 'is-win'}>{formatSignedProfit(bulkTransactions.reduce((total, trade) => total + (trade.profit ?? 0), 0))}</b></div>
               {bulkTransactions.slice().reverse().map((trade, index) => <div className="ai-scanner-history-row" key={`${trade.contractId ?? 'bulk-run'}-${index}`}><strong>{bulkTransactions.length - index}</strong><span>{(trade.stake ?? trade.buyPrice ?? 0).toFixed(2)} {trade.currency ?? currency}</span><b className={trade.profit !== undefined && trade.profit !== null && trade.profit < 0 ? 'is-loss' : 'is-win'}>{formatSignedProfit(trade.profit)}</b></div>)}
@@ -1463,6 +1454,17 @@ function BulkTraderView({ activeMarket, setActiveMarket, marketQuotes, accountMo
           </section>
         </div>
       )}
+      {batchResult && <div className="bot-result-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setBatchResult(null); }}>
+        <section className={`bot-result-dialog ai-batch-result ${batchResult.profit < 0 ? 'is-loss' : 'is-win'}`} role="dialog" aria-modal="true" aria-label="Batch result">
+          <button type="button" className="bot-result-close" onClick={() => setBatchResult(null)} aria-label="Close result">×</button>
+          <span className="ai-batch-result-kicker">{batchResult.profit < 0 ? 'LOSS' : 'PROFIT'}</span>
+          <strong className="ai-batch-result-value">{formatSignedProfit(batchResult.profit)}</strong>
+          <div className="ai-batch-result-stats">
+            <span><small>AMOUNT</small><b>{batchResult.amount.toFixed(2)} {batchResult.currency}</b></span>
+            <span><small>TRANSACTIONS</small><b>{batchResult.trades}</b></span>
+          </div>
+        </section>
+      </div>}
     </section>
   );
 }
@@ -1890,18 +1892,24 @@ function VertexRule({ children, muted = false }: { children: ReactNode; muted?: 
 function Router() {
   const SignInPage = () => <LegacyAuthPage mode="login" />;
   const SignUpPage = () => <LegacyAuthPage mode="signup" />;
+  const [location] = useLocation();
+  const legacyPath = ['/analysis', '/ai-scanner', '/analysis-tools'].includes(location);
+
+  useEffect(() => {
+    if (legacyPath) window.location.replace(basePath || '/');
+  }, [legacyPath]);
 
   return (
     // Keep a shared shell (sidebar, navbar) outside the boundary so it
     // survives a page crash.
     <RoutedErrorBoundary>
-      <Switch>
+      {legacyPath ? null : <Switch>
         <Route path="/" component={Home} />
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
         <Route path="/account" component={Account} />
         <Route component={NotFound} />
-      </Switch>
+      </Switch>}
     </RoutedErrorBoundary>
   );
 }
