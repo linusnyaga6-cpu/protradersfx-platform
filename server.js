@@ -1,4 +1,5 @@
 const express = require('express');
+const https = require('https');
 const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -279,6 +280,30 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '20kb' }));
 app.use(express.urlencoded({ extended: false, limit: '20kb' }));
 app.use(cookieParser());
+
+// Keep the independent Markets app available beneath the FX domain.
+function proxyMarketsRoute(req, res) {
+  const target = new URL(`https://ricemarket.co.ke${req.originalUrl}`);
+  const hopByHopHeaders = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 'upgrade']);
+  const headers = Object.fromEntries(Object.entries(req.headers).filter(([key]) => !hopByHopHeaders.has(key.toLowerCase())));
+  headers.host = target.host;
+  headers['x-forwarded-host'] = req.headers.host || 'protradersfx.com';
+  headers['x-forwarded-proto'] = 'https';
+  const upstream = https.request(target, { method: req.method, headers }, (upstreamResponse) => {
+    res.statusCode = upstreamResponse.statusCode || 502;
+    for (const [key, value] of Object.entries(upstreamResponse.headers)) {
+      if (value !== undefined && !hopByHopHeaders.has(key.toLowerCase())) res.setHeader(key, value);
+    }
+    upstreamResponse.pipe(res);
+  });
+  upstream.on('error', (error) => {
+    console.error('[markets-proxy]', error.message);
+    if (!res.headersSent) res.status(502).json({ error: 'Markets route unavailable' });
+    else res.end();
+  });
+  req.pipe(upstream);
+}
+app.use('/trade', proxyMarketsRoute);
 app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, max: 180, standardHeaders: true, legacyHeaders: false }));
 
 app.get('/api/config', (req, res) => res.json({ configured: Boolean(DERIV_CLIENT_ID && DERIV_AFFILIATE_TOKEN), publicAppConfigured: Boolean(DERIV_PUBLIC_APP_ID), partnerParam: DERIV_AFFILIATE_PARAM, campaign: DERIV_CAMPAIGN }));
