@@ -21,6 +21,14 @@
   ],
   "rewrites": [
     {
+      "source": "/trade",
+      "destination": "https://ricemarket.co.ke/trade"
+    },
+    {
+      "source": "/trade/:path*",
+      "destination": "https://ricemarket.co.ke/trade/:path*"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
