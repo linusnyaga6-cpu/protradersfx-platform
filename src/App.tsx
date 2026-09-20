@@ -1302,7 +1302,28 @@ function RecoveryBotView({ accountMode, activeMarket, marketQuotes }: { accountM
   );
 }
 
+type FreeBotDefinition = {
+  id: 'recovery' | 'diagnosis' | 'scanner1' | 'scanner2' | 'scanner3' | 'scanner4' | 'scanner5' | 'margic';
+  name: string;
+  eyebrow: string;
+  description: string;
+  accent: 'violet' | 'cyan' | 'amber' | 'navy';
+};
+
+const FREE_BOT_DEFINITIONS: FreeBotDefinition[] = [
+  { id: 'recovery', name: 'Recovery Bot', eyebrow: 'RECOVERY STRATEGY', description: 'Runs sequential recovery trades with editable stake, runs, Take Profit, and Stop Loss.', accent: 'violet' },
+  { id: 'diagnosis', name: 'Diagnosis Bot', eyebrow: 'DIGIT PRESSURE', description: 'Reads recent volatility digits and trades an Over 7 signal with controlled runs.', accent: 'cyan' },
+  { id: 'scanner1', name: 'Scanner 1', eyebrow: 'OVER 2 · BULK PATTERN', description: 'Money8GG Bot 41: waits for two digits at or below 2 followed by a digit above 2, then places Over 2 trades.', accent: 'amber' },
+  { id: 'scanner2', name: 'Scanner 2', eyebrow: 'OVER 2 · MARKET SCANNER', description: 'Money8GG Bot 42: scans volatility markets for 0, 1, and 2 staying below the 10.3% threshold before an Over 2 entry.', accent: 'navy' },
+  { id: 'scanner3', name: 'Scanner 3', eyebrow: 'OVER 1 · BANDWAGON', description: 'ExWager’s New Version Bandwagon Bot 2026: trades Over 1 with 2× recovery on Volatility 25 (1s).', accent: 'violet' },
+  { id: 'scanner4', name: 'Scanner 4', eyebrow: 'OVER 1 · ENTRY POINT', description: 'ExWager’s Updated Bandwagon Bot: waits for last digit 4, then trades Over 1 on Volatility 100 R.', accent: 'cyan' },
+  { id: 'scanner5', name: 'Scanner 5', eyebrow: 'UNDER RECOVERY · BANDWAGON', description: 'ExWager’s Recover Under Bandwagon: starts Under 9, then Under 8, recovering through Under 6 and Under 5 after losses.', accent: 'amber' },
+  { id: 'margic', name: 'Margic Bot', eyebrow: 'EVEN / ODD · SIGNAL', description: 'Reads the live digit balance and opens an Even or Odd strategy with configurable signal and risk controls.', accent: 'cyan' },
+];
+
 function FreeBotsView({ accountMode, activeMarket, marketQuotes }: { accountMode: 'DEMO' | 'REAL'; activeMarket: string; marketQuotes: Record<string, MarketQuote> }) {
+  const [selectedBotId, setSelectedBotId] = useState<FreeBotDefinition['id'] | null>(null);
+  const selectedBot = FREE_BOT_DEFINITIONS.find((bot) => bot.id === selectedBotId) ?? FREE_BOT_DEFINITIONS[0];
   const [botRunning, setBotRunning] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(true);
   const [initialAnalysis, setInitialAnalysis] = useState(true);
@@ -1329,16 +1350,41 @@ function FreeBotsView({ accountMode, activeMarket, marketQuotes }: { accountMode
     setStopLoss('30');
   };
 
+  if (!selectedBotId) {
+    return (
+      <section className="free-bot-library">
+        <header className="free-bot-library-header">
+          <div><span className="free-bot-eyebrow">FREE BOT WORKSPACE</span><h1>Choose a bot to start</h1><p>Open any strategy in the review workspace. The full library is listed vertically so every free bot stays visible.</p></div>
+          <span className="free-bot-account-badge">{accountMode} · 8 BOTS</span>
+        </header>
+        <div className="free-bot-grid">
+          {FREE_BOT_DEFINITIONS.map((bot, index) => (
+            <button type="button" className={`free-bot-card accent-${bot.accent}`} key={bot.id} onClick={() => setSelectedBotId(bot.id)}>
+              <span className="free-bot-card-index">0{index + 1}</span>
+              <span className="free-bot-card-icon">{bot.id === 'recovery' ? '↻' : bot.id === 'margic' ? '⌁' : '✦'}</span>
+              <span className="free-bot-card-eyebrow">{bot.eyebrow}</span>
+              <strong>{bot.name}</strong>
+              <p>{bot.description}</p>
+              <span className="free-bot-card-footer">OPEN BOT <ChevronRight size={14} /></span>
+            </button>
+          ))}
+        </div>
+        <div className="free-bot-library-note"><ShieldCheck size={15} /><span>Live execution is not placed from this preview. Choose a bot to review its market and risk parameters.</span></div>
+      </section>
+    );
+  }
+
   return (
     <section className="vertex-builder">
       <div className="vertex-toolbar">
         <div className="vertex-actions">
+          <button type="button" className="vertex-back-button" onClick={() => { resetBot(); setSelectedBotId(null); }}>← <span>All free bots</span></button>
           <button type="button">⇩ <span>Download bot</span></button>
           <button type="button">▱ <span>Load bot</span></button>
           <button type="button" onClick={resetBot}>↻ <span>Reset bot</span></button>
           <button type="button" onClick={resetBot}>⌗ <span>Reset layout</span></button>
         </div>
-        <div className="vertex-market-chip">{selectedDefinition.name}<strong>{formatMarketPrice(selectedQuote?.price ?? null, selectedQuote?.pipSize ?? 2)}</strong></div>
+        <div className="vertex-market-chip"><span>{selectedBot.name}</span>{selectedDefinition.name}<strong>{formatMarketPrice(selectedQuote?.price ?? null, selectedQuote?.pipSize ?? 2)}</strong></div>
       </div>
 
       <div className="vertex-builder-grid">
